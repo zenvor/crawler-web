@@ -1,0 +1,30 @@
+{
+  "name": "image-export",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "axios": "^1.5.1",
+    "lodash": "^4.17.21",
+    "normalize.css": "^8.0.1",
+    "primeflex": "^3.3.1",
+    "primeicons": "^6.0.1",
+    "primevue": "^3.36.0",
+    "vite-plugin-webfont-dl": "^3.7.6",
+    "vue": "^3.3.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.2.3",
+    "autoprefixer": "^10.4.16",
+    "node-sass": "^9.0.0",
+    "postcss": "^8.4.31",
+    "sass-loader": "^13.3.2",
+    "tailwindcss": "^3.3.3",
+    "vite": "^4.4.5"
+  }
+}

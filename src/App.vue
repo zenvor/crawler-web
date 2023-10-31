@@ -1,0 +1,1566 @@
+<script setup>
+import { ref, nextTick, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { extractions, downloadMultiple, downloadSingle } from '@/api/extract'
+import _ from 'lodash'
+import axios from 'axios'
+// 在组件中引入 JSON 数据
+import jsonData from '../public/response.json'
+
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import TriStateCheckbox from 'primevue/tristatecheckbox'
+import Checkbox from 'primevue/checkbox'
+import Dropdown from 'primevue/dropdown'
+import ToggleButton from 'primevue/togglebutton'
+import Paginator from 'primevue/paginator'
+import Image from 'primevue/image'
+import Tag from '@/components/Tag.vue'
+import Toast from 'primevue/toast'
+import { useToast } from 'primevue/usetoast'
+const toast = useToast()
+
+const formatFileSize = (bytes) => {
+  if (bytes < 1024) {
+    return bytes + ' B'
+  } else if (bytes < 1024 * 1024) {
+    return (bytes / 1024).toFixed(2) + ' KB'
+  } else {
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+  }
+}
+
+const parseLink = (link) => {
+  // 创建一个URL对象，传入链接字符串
+  let urlObj = new URL(link)
+  // 获取URL对象的hostname属性，即域名
+  let domain = urlObj.hostname
+  // 返回域名
+  return domain
+}
+
+const validateURL = (value) => {
+  const urlPattern = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
+  return urlPattern.test(value)
+}
+
+const isScrolled = ref(false)
+const handleScroll = () => {
+  isScrolled.value = window.scrollY > 50
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', handleScroll)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', handleScroll)
+})
+
+const link = ref('')
+const extractLink = ref('')
+const isInputFocus = ref(false)
+const images = ref([])
+const imagesClone = ref([])
+const extractLoading = ref(false)
+const disabled = ref(true)
+const pageNum = ref(1)
+const pageSize = ref(48)
+const total = ref(0)
+const totalPages = ref(0)
+
+watch(isInputFocus, (newVal) => {
+  console.log('newVal: ', newVal)
+})
+
+// 使用 watch 监听 link
+watch(
+  link,
+  (newVal) => {
+    if (validateURL(newVal)) {
+      // 链接通过验证，解除按钮禁用状态
+      disabled.value = false
+    } else {
+      // 链接未通过验证，禁用按钮
+      disabled.value = true
+    }
+  },
+  { immediate: true }
+)
+
+watch(images, () => {
+  total.value = images.value.length
+})
+
+const sortOptions = ref([
+  { label: 'Image size', value: 'imageSize' },
+  { label: 'File size', value: 'fileSize' },
+  { label: 'Width', value: 'width' },
+  { label: 'Height', value: 'height' },
+  { label: 'Type', value: 'type' },
+  { label: 'Name', value: 'name' },
+])
+
+const firstText = ref('Big')
+const lastText = ref('Small')
+const isAscending = ref(false) // 是否是升序
+
+const selectionSortBy = ref('')
+const sortType = ref('desc')
+
+const selectionType = ref('')
+
+// 点解类型标签触发
+const handleTagClick = (key) => {
+  if (selectionType.value == key) return (selectionType.value = undefined)
+  selectionType.value = key
+}
+
+// 根据类型进行过滤
+const filterByType = () => {
+  const filterImages = imagesClone.value.filter((item) => {
+    if (selectionType.value) {
+      return item.type == selectionType.value
+    } else {
+      return item
+    }
+  })
+  return filterImages
+}
+
+const searchQuery = ref('')
+// 判断一个字符串是否可以转化为数字
+const isNumeric = (str) => {
+  return !isNaN(str) && !isNaN(parseFloat(str))
+}
+
+// 根据输入的文本进行模糊搜索
+const fuzzySearch = (images) => {
+  const text = searchQuery.value
+  if (text) {
+    // 用于存放搜索结果
+    let result = []
+    // 判断输入的文本是否可以转化为数字
+    if (isNumeric(text)) {
+      // 如果可以转化为数字，就根据url, name, width, height进行搜索
+      for (let i = 0; i < images.length; i++) {
+        // 获取当前图片的信息
+        let image = images[i]
+        // 将图片的信息转化为字符串
+        let imageStr = image.url + image.name + image.width + image.height
+        // 判断图片的信息是否包含输入的文本
+        if (imageStr.indexOf(text) != -1) {
+          // 如果包含，就将图片添加到结果数组中
+          result.push(image)
+        }
+      }
+    } else {
+      // 如果不可以转化为数字，就根据url, name, type进行搜索
+      for (let i = 0; i < images.length; i++) {
+        // 获取当前图片的信息
+        let image = images[i]
+        // 将图片的信息转化为字符串
+        let imageStr = image.url + image.name + image.type
+        // 判断图片的信息是否包含输入的文本
+        if (imageStr.indexOf(text) != -1) {
+          // 如果包含，就将图片添加到结果数组中
+          result.push(image)
+        }
+      }
+    }
+    //返回结果数组
+    return result
+  } else {
+    return images
+  }
+}
+
+// 整理数据
+const disposalData = () => {
+  images.value = _.orderBy(fuzzySearch(filterByType()), [selectionSortBy.value], [sortType.value])
+}
+
+// 搜索框的输入触发
+const handleSearchQueryUpdate = (event) => disposalData()
+
+watch(isAscending, (newVal) => {
+  if (newVal) {
+    // Small => Big
+    firstText.value = 'Small'
+    lastText.value = 'Big'
+    sortType.value = 'asc'
+  } else {
+    // Big => Small
+    firstText.value = 'Big'
+    lastText.value = 'Small'
+    sortType.value = 'desc'
+  }
+  disposalData()
+})
+
+watch(selectionSortBy, () => disposalData())
+watch(selectionType, () => disposalData())
+
+// 图片背景反色
+const isInvertBackground = ref(false)
+
+// 当前页的数据
+const currentPageData = computed(() => {
+  const start = (pageNum.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  totalPages.value = Math.ceil(images.value.length / pageSize.value)
+  return images.value.slice(start, end)
+})
+
+const paginatorRef = ref(null)
+// 分页改变触发
+const handlePageChange = (event) => {
+  const page = event.page + 1
+  pageNum.value = page
+}
+
+// 改变分页
+const handleChangePage = ({ page }) => {
+  pageNum.value = page + 1
+  paginatorRef.value.changePage(page)
+}
+
+const allTypes = ref({})
+const extractionResultRef = ref(null)
+
+// 重置参数
+const reset = () => {
+  allTypes.value = {}
+  selectionSortBy.value = ''
+  selectionType.value = ''
+  total.value = 0
+  images.value = []
+  imagesClone.value = []
+}
+
+// 查找所有类型
+const findAllTypes = () => {
+  images.value.map((item) => {
+    const type = item.type
+    if (allTypes.value[type]) {
+      allTypes.value[type]++
+    } else {
+      allTypes.value[type] = 1
+    }
+  })
+}
+
+// 提取图片
+const handleExtract = async () => {
+  try {
+    extractLoading.value = true
+
+    setTimeout(() => {
+      reset()
+    }, 500)
+
+    images.value = (await extractions(link.value)).data
+    // images.value = jsonData.data;
+
+    extractLink.value = link.value
+
+    if (!images.value.length)
+      toast.add({
+        severity: 'error',
+        summary: 'No image was extracted',
+        group: 'bc',
+        life: 3000,
+      })
+
+    imagesClone.value = _.cloneDeep(images.value)
+    selectionSortBy.value = 'imageSize'
+
+    setTimeout(() => {
+      extractLoading.value = false
+    }, 500)
+
+    nextTick(() => {
+      const offsetTop = extractionResultRef.value?.offsetTop || 0
+      window.scrollTo({
+        top: offsetTop - 60,
+        behavior: 'smooth',
+      })
+    })
+
+    findAllTypes()
+  } catch (error) {
+    setTimeout(() => {
+      extractLoading.value = false
+    }, 500)
+  }
+}
+
+// 点击卡片触发
+const handleItemClick = (item) => {
+  item.checked ? (item.checked = false) : (item.checked = true)
+}
+
+let deselectAllDisabled = ref(true)
+
+watch(
+  images,
+  (newVal) => {
+    deselectAllDisabled = !newVal.some((item) => item.checked == true)
+  },
+  { deep: true }
+)
+
+let selectAllDisabled = ref(false)
+watch(
+  images,
+  (newVal) => {
+    selectAllDisabled = newVal.every((item) => item.checked == true)
+  },
+  { deep: true }
+)
+
+// 选中全部
+const handleSelectAll = () => {
+  images.value.forEach((item) => {
+    item.checked = true
+  })
+
+  imagesClone.value.forEach((item) => {
+    item.checked = true
+  })
+}
+
+// 取消选中全部
+const handleDeselectAll = () => {
+  images.value.forEach((item) => {
+    item.checked = false
+  })
+
+  imagesClone.value.forEach((item) => {
+    item.checked = false
+  })
+}
+
+const imageErrors = ref([])
+const handleImageError = (id) => {
+  imageErrors.value.push(id)
+
+  imageErrors.value.forEach((errorId) => {
+    for (let i = 0; i < images.value.length; i++) {
+      const item = images.value[i]
+      if (errorId == item.id) {
+        item.imageError = true
+        break
+      }
+    }
+  })
+}
+
+const downloadMultipleLoading = ref(false)
+const downloadSingleImageId = ref('')
+const handleDownload = async (type, imageId) => {
+  try {
+    let response
+
+    if (type == 'single') {
+      downloadSingleImageId.value = imageId
+      response = await downloadSingle(imageId)
+    } else {
+      downloadMultipleLoading.value = true
+
+      const selectedImageIds = images.value.filter((item) => item.checked).map((item) => item.id)
+
+      selectedImageIds.length > 1
+        ? (response = await downloadMultiple(selectedImageIds))
+        : (response = await downloadSingle(...selectedImageIds))
+    }
+
+    // 从响应中获取文件名
+    let contentDisposition = response.headers['content-disposition']
+    let filename
+    if (contentDisposition) {
+      let filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
+      let matches = filenameRegex.exec(contentDisposition)
+      if (matches != null && matches[1]) {
+        filename = matches[1].replace(/['"]/g, '')
+      }
+    }
+
+    let url = window.URL.createObjectURL(new Blob([response.data]))
+    let link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', filename)
+    document.body.appendChild(link)
+    link.click()
+
+    toast.add({
+      severity: 'success',
+      summary: 'File downloaded',
+      detail: `Filename: ${filename}`,
+      group: 'bc',
+      life: 3000,
+    })
+    setTimeout(() => {
+      downloadMultipleLoading.value = false
+      downloadSingleImageId.value = ''
+    }, 500)
+  } catch (error) {
+    setTimeout(() => {
+      downloadMultipleLoading.value = false
+      downloadSingleImageId.value = ''
+    }, 500)
+    toast.add({
+      severity: 'error',
+      summary: 'File download failed',
+      detail: `Filename: ${filename}`,
+      group: 'bc',
+      life: 3000,
+    })
+  }
+}
+
+const copyMultipleLoading = ref(false)
+const copyTextSingleImageId = ref('')
+const handleCopyUrl = (type, url, imageId) => {
+  try {
+    if (type == 'single') {
+      copyTextSingleImageId.value = imageId
+      copyTextToClipboard(url)
+      setTimeout(() => {
+        copyTextSingleImageId.value = ''
+      }, 1000)
+    } else {
+      copyMultipleLoading.value = true
+      const selectedImageUrl = images.value.filter((item) => item.checked).map((item) => item.url)
+
+      copyTextToClipboard(selectedImageUrl.join(','))
+      setTimeout(() => {
+        copyMultipleLoading.value = false
+      }, 1000)
+    }
+  } catch (error) {
+    setTimeout(() => {
+      copyMultipleLoading.value = false
+      copyTextSingleImageId.value = ''
+    }, 1000)
+  }
+}
+
+const copyTextToClipboard = (text) => {
+  function copyTextToClipboardFallback(text) {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  }
+  try {
+    if (navigator.clipboard) {
+      navigator.clipboard
+        .writeText(text)
+        .then(() => {
+          console.log('文本已复制到剪贴板')
+        })
+        .catch((error) => {
+          console.error('复制文本到剪贴板失败', error)
+        })
+    } else {
+      // 如果浏览器不支持 Clipboard API，则回退到旧方法
+      console.log('Clipboard API 不受支持，尝试使用 document.execCommand 方法')
+      copyTextToClipboardFallback(text)
+    }
+    toast.add({
+      severity: 'success',
+      summary: 'Copy successfully',
+      group: 'bc',
+      life: 3000,
+    })
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'Copy failure',
+      group: 'bc',
+      life: 3000,
+    })
+  }
+}
+</script>
+
+<template>
+  <div class="flex h-full flex-col min-h-screen bg-gray-100">
+    <Toast position="bottom-center" group="bc" />
+
+    <nav
+      :class="[
+        { 'bg-white !text-black shadow-md py-0': isScrolled },
+        { 'bg-zinc-800': !isScrolled },
+        'fixed inset-x-0 top-0 z-30 transition-all duration-200',
+      ]"
+    >
+      <div class="mx-auto transition-all w-full max-w-7xl px-6 sm:px-6 lg:px-8">
+        <div
+          :class="[
+            { '!py-3': isScrolled },
+            { 'text-white py-6': !isScrolled },
+            'box-border flex justify-between transition-all items-center',
+          ]"
+        >
+          <div class="flex items-center space-x-6">
+            <div class="flex items-center shrink-0">
+              <div>
+                <div href="/" class="flex">
+                  <a href="/">
+                    <img src="@/assets/logo.svg" class="logo block w-auto h-9" />
+                  </a>
+                  <div class="ml-3 text-sm font-medium flex flex-col">
+                    <a href="/">Image Extractor</a>
+                    <a
+                      style="color: #10b981"
+                      class="text-xs mt-[2px] leading-none inline-block hover:underline font-semibold text-primary-500"
+                      href="/"
+                      >0.1 Beta</a
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-center invisible space-x-4 md:visible">
+            <a
+              class="inline-flex items-center px-3 py-1.5 transition font-medium rounded-lg opacity-60 hover:opacity-100 !opacity-100"
+              href
+              >Extract</a
+            >
+          </div>
+
+          <div class="flex items-center justify-end">
+            <div class="md:flex md:items-center">
+              <img src="@/assets/profile-photo.jpg" class="profile-photo rounded block w-auto h-9" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <main class="h-full">
+      <!-- <div
+        class="relative w-full max-w-3xl mx-auto bg-white rounded-tl-none shadow-2xl mt-28 rounded-xl"
+      >
+        <div
+          class="absolute top-0 left-0 right-0 flex items-end overflow-hidden text-sm -translate-y-full select-none"
+        >
+          <div
+            class="px-6 h-8 flex items-center font-semibold transition-all translate-y-0.5 bg-gray-300 cursor-pointer rounded-t-xl hover:bg-gray-200 !bg-white shadow-md !translate-y-0 z-10 !h-9"
+          >Single Site</div>
+          <div
+            class="px-6 h-8 flex items-center font-semibold transition-all translate-y-0.5 bg-gray-300 cursor-pointer rounded-t-xl hover:bg-gray-200"
+          >Multiple Sites</div>
+        </div>
+        <div
+          class="relative overflow-hidden"
+          style="transition-duration: 200ms; transition-property: height; transition-timing-function: ease; --duration: 200ms;"
+        >
+          <div class="p-6">
+            <form class="flex flex-col sm:flex-row gap-3">
+              <div class="flex-1">
+                <div class="relative w-full">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="icon-tabler icon-tabler-link absolute z-10 transition -translate-y-1/2 left-4 top-1/2"
+                    width="24px"
+                    height="24px"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke="currentColor"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                    <path d="M9 15l6 -6" />
+                    <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                    <path
+                      d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"
+                    />
+                  </svg>
+                  <div class="relative">
+                    <input
+                      class="w-full px-3.5 placeholder-gray-400 transition border !border-gray-300 rounded-md shadow-sm focus:border-primary-600 bg-white pl-12 h-14 text-lg !bg-gray-50/50 pointer-events-none !shadow-none"
+                      placeholder="Enter any URL, like google.com"
+                      autofocus
+                      name="url"
+                      type="text"
+                      disabled
+                    />
+                    <div class="absolute flex gap-2 -translate-y-1/2 right-4 top-1/2"></div>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="submit"
+                class="relative inline-flex items-center justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num w-auto opacity-50 pointer-events-none h-14 text-lg px-6 bg-gray-800 hover:bg-gray-700 active:bg-gray-900 text-white px-6"
+                disabled
+              >
+                <div
+                  class="flex items-center justify-center overflow-hidden w-6 mr-2 -ml-2 transition-all"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="icon-tabler icon-tabler-loader w-5 animate-spin w-6"
+                    width="24px"
+                    height="24px"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke="currentColor"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                    <path d="M12 6l0 -3" />
+                    <path d="M16.25 7.75l2.15 -2.15" />
+                    <path d="M18 12l3 0" />
+                    <path d="M16.25 16.25l2.15 2.15" />
+                    <path d="M12 18l0 3" />
+                    <path d="M7.75 16.25l-2.15 2.15" />
+                    <path d="M6 12l-3 0" />
+                    <path d="M7.75 7.75l-2.15 -2.15" />
+                  </svg>
+                </div>
+
+                <span class>Extract</span>
+              </button>
+            </form>
+          </div>
+        </div>
+        <div
+          class="relative overflow-hidden"
+          style="transition-duration: 200ms; transition-property: height; transition-timing-function: ease; --duration: 200ms;"
+        ></div>
+        <div
+          class="relative overflow-hidden"
+          style="transition-duration: 200ms; transition-property: height; transition-timing-function: ease; --duration: 200ms;"
+        >
+          <div class="p-6 !pt-0">
+            <div>
+              <div class="px-5 py-4 border border-gray-200 rounded-lg bg-gray-50">
+                <p class="mb-2 font-medium">Waiting for browser...</p>
+                <div class="relative h-2.5 overflow-hidden bg-gray-300 rounded-full">
+                  <div
+                    role="progressbar"
+                    class="h-full rounded-full transition-all duration-500 bg-primary-500"
+                    style="width: 15%; background-size: 1.25rem 1.25rem; background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent); animation: 1000ms linear 0s infinite normal none running progress-stripes;"
+                  ></div>
+                </div>
+                <div
+                  class="relative overflow-hidden"
+                  style="transition-duration: 200ms; transition-property: height; transition-timing-function: ease; --duration: 200ms;"
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          class="relative overflow-hidden"
+          style="transition-duration: 200ms; transition-property: height; transition-timing-function: ease; --duration: 200ms;"
+        ></div>
+      </div>-->
+
+      <div class="relative flex flex-col justify-center transition-all duration-300">
+        <div class="absolute bg-zinc-800 h-[80%] pointer-events-none w-full top-0 inset-x-0"></div>
+        <div class="py-12 relative z-10 pt-48">
+          <div class="mx-auto transition-all w-full max-w-7xl px-6 sm:px-4 lg:px-6">
+            <div class="flex flex-col justify-center transition-all duration-500">
+              <div>
+                <div class="text-center text-white">
+                  <h1 class="mb-2 text-[3.25rem] leading-none font-extrabold">Extract images</h1>
+                  <h2 class="text-xl text-gray-400">from any public website</h2>
+                </div>
+                <div class="relative w-full max-w-3xl mx-auto bg-white rounded-tl-none shadow-2xl mt-28 rounded-xl">
+                  <div
+                    class="absolute top-0 left-0 right-0 flex items-end overflow-hidden text-sm -translate-y-full select-none"
+                  >
+                    <div
+                      class="px-6 flex items-center font-semibold transition-all translate-y-0.5 bg-gray-300 cursor-pointer rounded-t-xl hover:bg-gray-200 !bg-white shadow-md !translate-y-0 z-10 !h-9"
+                    >
+                      Single Site
+                    </div>
+                    <div
+                      class="px-6 h-8 flex items-center font-semibold transition-all translate-y-0.5 bg-gray-300 cursor-pointer rounded-t-xl hover:bg-gray-200"
+                    >
+                      Multiple Sites
+                    </div>
+                  </div>
+                  <div
+                    class="relative overflow-hidden"
+                    style="
+                      transition-duration: 200ms;
+                      transition-property: height;
+                      transition-timing-function: ease;
+                      --duration: 200ms;
+                    "
+                  >
+                    <div class="p-6">
+                      <form class="flex flex-col sm:flex-row gap-3">
+                        <div class="flex-1">
+                          <span style="position: relative" class="relative p-input-icon-left w-full h-full">
+                            <!-- <i
+                              :class="['pi pi-link -translate-y-0.5']"
+                            />-->
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              :style="{
+                                'font-size': '1.4rem',
+                                transition: 'all 200ms',
+                                color: isInputFocus ? 'rgb(5, 150, 105)' : 'black',
+                              }"
+                              class="icon-tabler icon-tabler-link translate-x-1.5 -translate-y-1"
+                              width="24px"
+                              height="24px"
+                              viewBox="0 0 24 24"
+                              stroke-width="2"
+                              stroke="currentColor"
+                              fill="none"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                              <path d="M9 15l6 -6" />
+                              <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                              <path
+                                d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"
+                              />
+                            </svg>
+                            <InputText
+                              @focus="isInputFocus = true"
+                              @blur="isInputFocus = false"
+                              size="large"
+                              v-model="link"
+                              class="pl-16 text-xl w-full h-full border-4"
+                              placeholder="Enter any URL, like google.com"
+                            />
+                          </span>
+                        </div>
+                        <Button
+                          :disabled="disabled"
+                          :loading="extractLoading"
+                          @click="handleExtract"
+                          label="Extract"
+                          size="large"
+                        >
+                          <template #loadingicon>
+                            <div
+                              :class="[
+                                'w-6 h-6 opacity-100 scale-100 mr-2 -ml-2',
+                                'flex items-center justify-center overflow-hidden w-0 opacity-0 scale-0 h-0',
+                              ]"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="icon-tabler icon-tabler-loader animate-spin w-6"
+                                width="24px"
+                                height="24px"
+                                viewBox="0 0 24 24"
+                                stroke-width="2"
+                                stroke="currentColor"
+                                fill="none"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                <path d="M12 6l0 -3" />
+                                <path d="M16.25 7.75l2.15 -2.15" />
+                                <path d="M18 12l3 0" />
+                                <path d="M16.25 16.25l2.15 2.15" />
+                                <path d="M12 18l0 3" />
+                                <path d="M7.75 16.25l-2.15 2.15" />
+                                <path d="M6 12l-3 0" />
+                                <path d="M7.75 7.75l-2.15 -2.15" />
+                              </svg>
+                            </div>
+                          </template>
+                        </Button>
+                      </form>
+                    </div>
+                  </div>
+                  <div
+                    class="relative overflow-hidden"
+                    style="
+                      transition-duration: 200ms;
+                      transition-property: height;
+                      transition-timing-function: ease;
+                      --duration: 200ms;
+                    "
+                  ></div>
+                  <div
+                    class="relative overflow-hidden"
+                    style="
+                      transition-duration: 200ms;
+                      transition-property: height;
+                      transition-timing-function: ease;
+                      --duration: 200ms;
+                    "
+                  ></div>
+                  <div
+                    class="relative overflow-hidden"
+                    style="
+                      transition-duration: 200ms;
+                      transition-property: height;
+                      transition-timing-function: ease;
+                      --duration: 200ms;
+                    "
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div ref="extractionResultRef" v-if="imagesClone.length" class="py-12" data-test-id="extraction-result">
+        <div class="mx-auto transition-all w-full max-w-screen-2xl px-6 sm:px-6 lg:px-8">
+          <div class="flex flex-col md:flex-row">
+            <div class="md:w-[300px] shrink-0 md:mr-12 mb-12 md:mb-0">
+              <div class="sticky space-y-8 top-24">
+                <div>
+                  <div class="space-y-6">
+                    <div>
+                      <div>
+                        <div class="relative" data-headlessui-state>
+                          <div class="flex items-center justify-between mb-1">
+                            <label id="headlessui-listbox-label-1" data-headlessui-state class="font-medium"
+                              >Sort images</label
+                            >
+                            <div class="space-x-2 text-sm font-medium text-gray-500 hover:text-gray-900">
+                              <button @click="isAscending = !isAscending" class="flex items-center">
+                                {{ firstText }}
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  class="icon-tabler icon-tabler-arrow-right h-[18px]"
+                                  width="24px"
+                                  height="24px"
+                                  viewBox="0 0 24 24"
+                                  stroke-width="2"
+                                  stroke="currentColor"
+                                  fill="none"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                >
+                                  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                  <path d="M5 12l14 0" />
+                                  <path d="M13 18l6 -6" />
+                                  <path d="M13 6l6 6" />
+                                </svg>
+                                {{ lastText }}
+                              </button>
+                            </div>
+                          </div>
+                          <Dropdown
+                            ref="dropdownRef"
+                            v-model="selectionSortBy"
+                            :options="sortOptions"
+                            optionLabel="label"
+                            optionValue="value"
+                            class="w-full md:w-14rem"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h5 class="mb-1 font-medium">Filter images by type</h5>
+                      <div
+                        class="flex flex-wrap gap-2 p-3 bg-white border-2 border-gray-300 rounded-md shadow-sm min-h-[44px]"
+                      >
+                        <Tag
+                          @click="handleTagClick(key)"
+                          v-for="(value, key) in allTypes"
+                          :key="key"
+                          :blur="selectionType ? key != selectionType : undefined"
+                          :type="key"
+                          :number="value"
+                        ></Tag>
+                      </div>
+                    </div>
+                    <div>
+                      <div class>
+                        <label class="block mb-1 font-medium">Search for images</label>
+                        <div class="relative w-full">
+                          <div class="relative">
+                            <InputText
+                              type="text"
+                              v-model="searchQuery"
+                              @input="handleSearchQueryUpdate"
+                              class="w-full px-3.5 placeholder-gray-400 transition rounded"
+                              placeholder="Type to search..."
+                            />
+
+                            <div class="absolute flex gap-2 -translate-y-1/2 right-4 top-1/2"></div>
+                          </div>
+                        </div>
+                        <div class="mt-1.5 leading-tight text-xs text-gray-500">
+                          Find by URL, name, type and width/height.
+                        </div>
+                      </div>
+                    </div>
+                    <label class="flex items-start cursor-pointer">
+                      <Checkbox v-model="isInvertBackground" :binary="true" class="translate-y-1" />
+                      <div class="ml-2">
+                        <div class="font-medium select-none">Invert image preview background</div>
+                        <div class="mt-1 text-xs text-gray-500">
+                          Can't see some images? Change the image background to a dark color.
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <h4 class="mb-2 font-bold uppercase text">Download</h4>
+                  <div>
+                    <div class="flex mb-2 space-x-2">
+                      <Button
+                        :disabled="selectAllDisabled"
+                        type="button"
+                        label="Select all"
+                        icon="pi pi-check-circle"
+                        @click="handleSelectAll"
+                        class="w-[50%]"
+                      />
+                      <Button
+                        size="small"
+                        :disabled="deselectAllDisabled"
+                        type="button"
+                        label="Deselect all"
+                        icon="pi pi-circle"
+                        @click="handleDeselectAll"
+                        class="w-[50%]"
+                      />
+                    </div>
+                    <div class="mt-6">
+                      <button
+                        @click="handleDownload('multiple')"
+                        type="submit"
+                        :class="[
+                          { 'opacity-50 pointer-events-none': downloadLoading },
+                          'relative items-center flex justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:pointer-events-none disabled:opacity-25 tabular-num w-full disabled:!shadow-none h-14 text-lg px-6 bg-gray-800 hover:bg-gray-700 shadow active:bg-gray-900 text-white',
+                        ]"
+                        :disabled="deselectAllDisabled"
+                      >
+                        <div
+                          :class="[
+                            { 'w-6 h-6 opacity-100 scale-100 mr-2 -ml-2': downloadLoading },
+                            'flex items-center justify-center overflow-hidden w-0 opacity-0 scale-0 h-0',
+                          ]"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="icon-tabler icon-tabler-loader animate-spin w-6"
+                            width="24px"
+                            height="24px"
+                            viewBox="0 0 24 24"
+                            stroke-width="2"
+                            stroke="currentColor"
+                            fill="none"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                            <path d="M12 6l0 -3" />
+                            <path d="M16.25 7.75l2.15 -2.15" />
+                            <path d="M18 12l3 0" />
+                            <path d="M16.25 16.25l2.15 2.15" />
+                            <path d="M12 18l0 3" />
+                            <path d="M7.75 16.25l-2.15 2.15" />
+                            <path d="M6 12l-3 0" />
+                            <path d="M7.75 7.75l-2.15 -2.15" />
+                          </svg>
+                        </div>
+
+                        <div :class="[{ hidden: downloadLoading }, 'mr-2 -ml-2']">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="'icon-tabler icon-tabler-download w-6"
+                            width="24px"
+                            height="24px"
+                            viewBox="0 0 24 24"
+                            stroke-width="2"
+                            stroke="currentColor"
+                            fill="none"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                            <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+                            <path d="M7 11l5 5l5 -5" />
+                            <path d="M12 4l0 12" />
+                          </svg>
+                        </div>
+                        <span class>Download selected</span>
+                      </button>
+
+                      <button
+                        type="submit"
+                        @click="handleCopyUrl('multiple')"
+                        :class="[
+                          { 'opacity-50 pointer-events-none': copyMultipleLoading },
+                          'relative items-center flex justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num w-full disabled:pointer-events-none disabled:!shadow-none h-10 text-[1rem] px-4 bg-white disabled:!border-gray-300 shadow hover:bg-gray-100 active:bg-gray-50 text-black mt-3',
+                        ]"
+                        :disabled="deselectAllDisabled"
+                      >
+                        <div :class="[{ hidden: !copyMultipleLoading }, 'mr-2 -ml-2']">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="icon-tabler icon-tabler-check w-5"
+                            width="24px"
+                            height="24px"
+                            viewBox="0 0 24 24"
+                            stroke-width="2"
+                            stroke="currentColor"
+                            fill="none"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                            <path d="M5 12l5 5l10 -10" />
+                          </svg>
+                        </div>
+
+                        <div :class="[{ hidden: copyMultipleLoading }, 'mr-2 -ml-2']">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="icon-tabler icon-tabler-clipboard-text w-5"
+                            width="24px"
+                            height="24px"
+                            viewBox="0 0 24 24"
+                            stroke-width="2"
+                            stroke="currentColor"
+                            fill="none"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                            <path
+                              d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2"
+                            />
+                            <path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" />
+                            <path d="M9 12h6" />
+                            <path d="M9 16h6" />
+                          </svg>
+                        </div>
+                        <span class>{{ copyMultipleLoading ? 'Copied to clipboard' : 'Copy selected URLs' }}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="w-full advertisement !mt-16" align="center">
+                  <ins
+                    class="adsbygoogle"
+                    data-adtest="off"
+                    data-ad-client="ca-pub-9215090689604809"
+                    data-ad-slot="7074848071"
+                    data-ad-format="auto"
+                    data-full-width-responsive="true"
+                    style="display: block"
+                  ></ins>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex-1">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-5">
+                <div class>
+                  Showing {{ currentPageData.length }} of {{ total }} images from
+                  <!-- FIXME: -->
+                  <strong>{{ parseLink(link) }}</strong>
+                </div>
+                <div class="flex items-center mt-2 sm:mt-0 sm:ml-auto space-x-8">
+                  <div class="flex space-x-0 select-none items-center">
+                    <div v-for="(item, index) in totalPages" :key="index">
+                      <button
+                        @click="handleChangePage({ page: index })"
+                        :class="[
+                          { '!font-bold': item == pageNum },
+                          { 'text-gray-600': item != pageNum },
+                          'px-1.5 py-0.5 rounded hover:bg-gray-200 transition tabular-nums font-medium',
+                        ]"
+                      >
+                        {{ item }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="images.length">
+                <div class="list w-full grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  <div
+                    v-for="(item, index) in currentPageData"
+                    :key="index"
+                    @click="handleItemClick(item)"
+                    :class="[
+                      { 'border-primary-500': item.checked },
+                      'relative flex p-3 sm:p-4 transition bg-white border-4 border-transparent shadow cursor-pointer rounded-xl hover:shadow-xl hover:-translate-y-2 group min-w-0 flex-col justify-between',
+                    ]"
+                  >
+                    <div
+                      v-if="false"
+                      :class="[
+                        'absolute z-10 flex justify-center items-center transition  group-hover:opacity-100 top-2 left-2 group-hover:scale-100',
+                        { 'scale-50 opacity-0': !item.checked },
+                      ]"
+                    >
+                      <Checkbox v-model="item.checked" :binary="true" />
+                    </div>
+
+                    <div
+                      :class="[
+                        { 'scale-100 opacity-100': item.checked },
+                        { 'scale-50 -rotate-45 opacity-0': !item.checked },
+                        'absolute z-20 flex items-center justify-center text-white rounded-full shadow top-2 left-2 w-7 h-7 bg-primary-500 transition',
+                      ]"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="icon-tabler icon-tabler-check h-5"
+                        width="24px"
+                        height="24px"
+                        viewBox="0 0 24 24"
+                        stroke-width="3"
+                        stroke="currentColor"
+                        fill="none"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M5 12l5 5l10 -10" />
+                      </svg>
+                    </div>
+
+                    <div
+                      :class="[
+                        { '!scale-50 !opacity-0': item.checked },
+                        'transition absolute z-10 scale-50 border border-gray-300 rounded-full shadow opacity-0 bg-gray-50 group-hover:opacity-100 top-2 left-2 w-7 h-7 group-hover:scale-100',
+                      ]"
+                      :style="{ display: item.checked ? 'none' : '' }"
+                    ></div>
+
+                    <div
+                      :class="[
+                        { 'bg-gray-900': isInvertBackground },
+                        'relative flex items-center justify-center overflow-hidden transition border rounded-md select-none aspect-square shrink-0 w-full bg-gray-100 border-gray-200',
+                      ]"
+                    >
+                      <div
+                        class="absolute top-0 right-0 py-0.5 px-1.5 text-xs font-semibold bg-white border border-t-0 border-r-0 border-gray-300 rounded-bl-md flex items-center shadow-sm text-gray-700"
+                      >
+                        {{ item.width }}
+                        <span class="text-gray-500 mx-0.5">x</span>
+                        {{ item.height }}
+                      </div>
+                      <img
+                        :src="item.url"
+                        class="object-contain object-center max-w-full max-h-full rounded-bl-md"
+                        loading="lazy"
+                        @error="handleImageError(item.id)"
+                        referrerpolicy="no-referrer"
+                      />
+
+                      <div
+                        v-if="item.imageError"
+                        class="absolute inset-0 bg-amber-100 flex flex-col items-center justify-center text-center p-5 text-sm text-amber-700 font-medium"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="icon-tabler icon-tabler-eye-off"
+                          width="24px"
+                          height="24px"
+                          viewBox="0 0 24 24"
+                          stroke-width="2"
+                          stroke="currentColor"
+                          fill="none"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                          <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
+                          <path
+                            d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87"
+                          />
+                          <path d="M3 3l18 18" />
+                        </svg>
+                        <span class="mt-2">Image preview not available.</span>
+                        <span class="text-xs mt-3">
+                          <button class="underline hover:text-amber-900 transition">Download</button> or
+                          <button class="underline hover:text-amber-900 transition">open in new tab</button> to view.
+                        </span>
+                      </div>
+                    </div>
+                    <div class="flex-1 min-w-0 mt-3">
+                      <div class="mb-2 text-sm font-semibold truncate">
+                        <span v-if="item.name">{{ item.name }}</span>
+                        <span v-else class="italic opacity-60">Unknown name</span>
+                      </div>
+                      <div class="flex justify-between flex-1">
+                        <div class="flex items-center space-x-2">
+                          <Tag :type="item.type" />
+                          <div
+                            class="size text-sm font-medium text-gray-500 border border-gray-300 rounded px-1.5 h-6 flex items-center"
+                          >
+                            {{ formatFileSize(item.fileSize) }}
+                          </div>
+                        </div>
+                        <div class="flex gap-2 sm:gap-1 items-center">
+                          <button
+                            @click.stop="handleCopyUrl('single', item.url, item.id)"
+                            type="submit"
+                            :class="[
+                              { 'opacity-50 pointer-events-none': item.id == copyTextSingleImageId ? true : false },
+                              'relative inline-flex items-center justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num h-7 text-sm w-6 text-gray-800 hover-text-primary-600 !border-transparent',
+                            ]"
+                          >
+                            <div v-show="item.id == copyTextSingleImageId ? true : false">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="icon-tabler icon-tabler-check"
+                                width="24px"
+                                height="24px"
+                                viewBox="0 0 24 24"
+                                stroke-width="2"
+                                stroke="currentColor"
+                                fill="none"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                <path d="M5 12l5 5l10 -10" />
+                              </svg>
+                            </div>
+
+                            <div v-show="item.id == copyTextSingleImageId ? false : true">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="icon-tabler icon-tabler-link"
+                                width="24px"
+                                height="24px"
+                                viewBox="0 0 24 24"
+                                stroke-width="2"
+                                stroke="currentColor"
+                                fill="none"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                <path d="M9 15l6 -6" />
+                                <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                                <path
+                                  d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"
+                                />
+                              </svg>
+                            </div>
+                            <span class></span>
+                          </button>
+                          <button
+                            @click.stop="handleDownload('single', item.id)"
+                            type="submit"
+                            :class="[
+                              { 'opacity-50 pointer-events-none': item.id == downloadSingleImageId ? true : false },
+                              'relative inline-flex items-center flex justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num h-7 text-sm w-6 text-gray-800 hover-text-primary-600 !border-transparent',
+                            ]"
+                            data-test-id="download-image"
+                          >
+                            <div
+                              v-show="item.id == downloadSingleImageId ? true : false"
+                              class="flex items-center justify-center overflow-hidden w-full"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="icon-tabler icon-tabler-loader w-5 animate-spin w-full"
+                                width="24px"
+                                height="24px"
+                                viewBox="0 0 24 24"
+                                stroke-width="2"
+                                stroke="currentColor"
+                                fill="none"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                <path d="M12 6l0 -3" />
+                                <path d="M16.25 7.75l2.15 -2.15" />
+                                <path d="M18 12l3 0" />
+                                <path d="M16.25 16.25l2.15 2.15" />
+                                <path d="M12 18l0 3" />
+                                <path d="M7.75 16.25l-2.15 2.15" />
+                                <path d="M6 12l-3 0" />
+                                <path d="M7.75 7.75l-2.15 -2.15" />
+                              </svg>
+                            </div>
+
+                            <div v-show="item.id == downloadSingleImageId ? false : true">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="icon-tabler icon-tabler-download"
+                                width="24px"
+                                height="24px"
+                                viewBox="0 0 24 24"
+                                stroke-width="2"
+                                stroke="currentColor"
+                                fill="none"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+                                <path d="M7 11l5 5l5 -5" />
+                                <path d="M12 4l0 12" />
+                              </svg>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex justify-center mt-10">
+                  <Paginator
+                    :alwaysShow="false"
+                    v-show="total"
+                    :rows="pageSize"
+                    :totalRecords="total"
+                    @page="handlePageChange"
+                    ref="paginatorRef"
+                    template="PrevPageLink PageLinks NextPageLink"
+                  ></Paginator>
+                </div>
+              </div>
+
+              <div v-else class="flex flex-col items-center justify-center pt-32">
+                <div class="mb-2 text-xl font-bold">No matching images found.</div>
+                <div class="text-gray-500">
+                  Try changing the filters or
+                  <button class="underline">removing them</button>.
+                </div>
+              </div>
+
+              <div class="w-full advertisement mt-16" align="center">
+                <ins
+                  class="adsbygoogle"
+                  data-adtest="off"
+                  data-ad-client="ca-pub-9215090689604809"
+                  data-ad-slot="2533377261"
+                  data-ad-format="auto"
+                  data-full-width-responsive="true"
+                  style="display: block"
+                ></ins>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="py-12 mt-0">
+        <div class="mx-auto transition-all w-full max-w-3xl px-6 sm:px-6 lg:px-8">
+          <dl class="grid mx-auto gap-y-10 gap-x-8 lg:gap-y-16">
+            <div class="relative pl-16">
+              <dt class="text-base font-semibold leading-7 text-gray-900">
+                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-primary-600">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="icon-tabler icon-tabler-zoom-in-area-filled w-6 h-6 text-white"
+                    width="24px"
+                    height="24px"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke="currentColor"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                    <path
+                      d="M15 9a6 6 0 0 1 4.891 9.476l2.816 2.817a1 1 0 0 1 -1.32 1.497l-.094 -.083l-2.817 -2.816a6 6 0 0 1 -9.472 -4.666l-.004 -.225l.004 -.225a6 6 0 0 1 5.996 -5.775zm0 3a1 1 0 0 0 -.993 .883l-.007 .117v1h-1l-.117 .007a1 1 0 0 0 0 1.986l.117 .007h1v1l.007 .117a1 1 0 0 0 1.986 0l.007 -.117v-1h1l.117 -.007a1 1 0 0 0 0 -1.986l-.117 -.007h-1v-1l-.007 -.117a1 1 0 0 0 -.993 -.883z"
+                      stroke-width="0"
+                      fill="currentColor"
+                    />
+                    <path
+                      d="M3 14a1 1 0 0 1 .993 .883l.007 .117v1a1 1 0 0 0 .883 .993l.117 .007h1a1 1 0 0 1 .117 1.993l-.117 .007h-1a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-1a1 1 0 0 1 1 -1z"
+                      stroke-width="0"
+                      fill="currentColor"
+                    />
+                    <path
+                      d="M3 9a1 1 0 0 1 .993 .883l.007 .117v1a1 1 0 0 1 -1.993 .117l-.007 -.117v-1a1 1 0 0 1 1 -1z"
+                      stroke-width="0"
+                      fill="currentColor"
+                    />
+                    <path
+                      d="M6 2a1 1 0 0 1 .117 1.993l-.117 .007h-1a1 1 0 0 0 -.993 .883l-.007 .117v1a1 1 0 0 1 -1.993 .117l-.007 -.117v-1a3 3 0 0 1 2.824 -2.995l.176 -.005h1z"
+                      stroke-width="0"
+                      fill="currentColor"
+                    />
+                    <path
+                      d="M11 2a1 1 0 0 1 .117 1.993l-.117 .007h-1a1 1 0 0 1 -.117 -1.993l.117 -.007h1z"
+                      stroke-width="0"
+                      fill="currentColor"
+                    />
+                    <path
+                      d="M16 2a3 3 0 0 1 2.995 2.824l.005 .176v1a1 1 0 0 1 -1.993 .117l-.007 -.117v-1a1 1 0 0 0 -.883 -.993l-.117 -.007h-1a1 1 0 0 1 -.117 -1.993l.117 -.007h1z"
+                      stroke-width="0"
+                      fill="currentColor"
+                    />
+                  </svg>
+                </div>
+                <h4 class="text-lg">Find Every Image</h4>
+              </dt>
+              <dd class="mt-2 text-base leading-7 text-gray-600">
+                We use many different methods and strategies to find all relevant images on an website. This includes
+                background images, dynamically loaded or embedded images and SVG elements.
+              </dd>
+            </div>
+            <div class="relative pl-16">
+              <dt class="text-base font-semibold leading-7 text-gray-900">
+                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-primary-600">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="icon-tabler icon-tabler-augmented-reality w-6 h-6 text-white"
+                    width="24px"
+                    height="24px"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke="currentColor"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                    <path d="M4 8v-2a2 2 0 0 1 2 -2h2" />
+                    <path d="M4 16v2a2 2 0 0 0 2 2h2" />
+                    <path d="M16 4h2a2 2 0 0 1 2 2v2" />
+                    <path d="M16 20h2a2 2 0 0 0 2 -2v-2" />
+                    <path d="M12 12.5l4 -2.5" />
+                    <path d="M8 10l4 2.5v4.5l4 -2.5v-4.5l-4 -2.5z" />
+                    <path d="M8 10v4.5l4 2.5" />
+                  </svg>
+                </div>
+                <h4 class="text-lg">Automatic Image Analysis</h4>
+              </dt>
+              <dd class="mt-2 text-base leading-7 text-gray-600">
+                Every discovered image is analysed to find its dimensions, type, size and name. With more advanced
+                features to come in the future.
+              </dd>
+            </div>
+            <div class="relative pl-16">
+              <dt class="text-base font-semibold leading-7 text-gray-900">
+                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-primary-600">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="icon-tabler icon-tabler-tool w-6 h-6 text-white"
+                    width="24px"
+                    height="24px"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke="currentColor"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                    <path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5" />
+                  </svg>
+                </div>
+                <h4 class="text-lg">Useful Tools</h4>
+              </dt>
+              <dd class="mt-2 text-base leading-7 text-gray-600">
+                View all images in a grid or list, search for specific ones by name, filter by type and sort by width,
+                height and other properties to find exactly what you are looking for.
+              </dd>
+            </div>
+            <div class="relative pl-16">
+              <dt class="text-base font-semibold leading-7 text-gray-900">
+                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-primary-600">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="icon-tabler icon-tabler-download w-6 h-6 text-white"
+                    width="24px"
+                    height="24px"
+                    viewBox="0 0 24 24"
+                    stroke-width="2"
+                    stroke="currentColor"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" />
+                    <path d="M7 11l5 5l5 -5" />
+                    <path d="M12 4l0 12" />
+                  </svg>
+                </div>
+                <h4 class="text-lg">Easy Download</h4>
+              </dt>
+              <dd class="mt-2 text-base leading-7 text-gray-600">
+                Download invididual images or select the ones you want and download them all at once. Alternatively, you
+                can also only copy the URLs to the clipboard.
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </main>
+  </div>
+</template>
+
+<style scoped>
+.logo,
+.profile-photo {
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo {
+  filter: drop-shadow(0 0 2em #1eb05c);
+}
+
+.profile-photo {
+  filter: drop-shadow(0 0 2em #c5b293);
+}
+
+.bg-primary-500 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(16 185 129 / var(--tw-bg-opacity));
+}
+
+.border-primary-500 {
+  --tw-bg-opacity: 1;
+  border-color: rgb(16 185 129 / var(--tw-bg-opacity));
+}
+
+.hover-text-primary-600:hover {
+  --tw-text-opacity: 1;
+  color: rgb(5 150 105 / var(--tw-text-opacity));
+}
+
+@media (max-width: 639.99px) {
+  .list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .size {
+    display: none;
+  }
+}
+
+:deep(.p-input-icon-left > .p-inputtext) {
+  padding-left: 3.1rem;
+}
+
+:deep(.p-dropdown-panel.p-component.p-ripple-disabled) {
+  transform: translateY(10px) !important;
+}
+
+:deep(.p-inputtext),
+:deep(.p-dropdown) {
+  border: 2px solid #ced4da;
+}
+
+:deep(.p-inputtext:enabled:focus),
+:deep(.p-dropdown:enabled:focus) {
+  box-shadow: 0 0 0 0.25rem #a7f3d0;
+}
+</style>
