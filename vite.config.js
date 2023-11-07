@@ -15,8 +15,8 @@ export default defineConfig({
     proxy: {
       // 设置跨域代理
       '/api': {
-        // target: 'http://localhost:8000',
-        target: 'http://47.108.179.251:8000',
+        target: 'http://localhost:8000',
+        // target: 'http://47.108.179.251:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
