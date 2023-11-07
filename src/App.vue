@@ -23,9 +23,9 @@ const formatFileSize = (bytes) => {
   if (bytes < 1024) {
     return bytes + ' B'
   } else if (bytes < 1024 * 1024) {
-    return (bytes / 1024).toFixed(2) + ' KB'
+    return Math.round(bytes / 1024) + ' KB'
   } else {
-    return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+    return Math.round(bytes / (1024 * 1024)) + ' MB'
   }
 }
 
@@ -175,6 +175,8 @@ const fuzzySearch = (images) => {
 
 // 整理数据
 const disposalData = () => {
+  currentPageData.value = []
+
   images.value = _.orderBy(fuzzySearch(filterByType()), [selectionSortBy.value], [sortType.value])
 }
 
@@ -240,12 +242,14 @@ const reset = () => {
 const findAllTypes = () => {
   images.value.map((item) => {
     const type = item.type
+
     if (allTypes.value[type]) {
       allTypes.value[type]++
     } else {
       allTypes.value[type] = 1
     }
   })
+  console.log('allTypes.value', allTypes.value)
 }
 
 // 提取图片
@@ -1068,7 +1072,7 @@ const copyTextToClipboard = (text) => {
             <div class="flex-1">
               <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-5">
                 <div class>
-                  Showing {{ currentPageData.length }} of {{ total }} images from
+                  Showing {{ currentPageData.length }} of {{ imagesClone.length }} images from
                   <!-- FIXME: -->
                   <strong>{{ parseLink(link) }}</strong>
                 </div>
@@ -1203,7 +1207,7 @@ const copyTextToClipboard = (text) => {
                         <div class="flex items-center space-x-2">
                           <Tag :type="item.type" />
                           <div
-                            class="size text-sm font-medium text-gray-500 border border-gray-300 rounded px-1.5 h-6 flex items-center"
+                            class="size text-sm whitespace-nowrap font-medium text-gray-500 border border-gray-300 rounded px-1.5 h-6 flex items-center"
                           >
                             {{ formatFileSize(item.fileSize) }}
                           </div>
@@ -1537,13 +1541,62 @@ const copyTextToClipboard = (text) => {
   color: rgb(5 150 105 / var(--tw-text-opacity));
 }
 
-@media (max-width: 639.99px) {
+@media (max-width: 815px) {
   .list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .size {
     display: none;
   }
+}
+
+@media (max-width: 767.5px) {
+  .list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .size {
+    display: block;
+  }
+}
+
+@media (max-width: 576px) {
+  .list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .size {
+    display: block;
+  }
+}
+
+@media (max-width: 467px) {
+  .list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .size {
+    display: block;
+  }
+}
+
+@media (max-width: 466.99px) {
+  .list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .size {
+    display: none;
+  }
+}
+
+@media (max-width: 347px) {
+  .list {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+  .size {
+    display: none;
+  }
+}
+
+:deep(.p-button-label) {
+  font-weight: 500;
 }
 
 :deep(.p-input-icon-left > .p-inputtext) {
