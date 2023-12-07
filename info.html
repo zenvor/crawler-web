@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .parent {
+            overflow: hidden;
+            transition: height 0.5s ease;
+            height: 102px; /* 初始高度 */
+        }
+
+        .child {
+            height: 102px;
+            background-color: #3498db;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="parent" id="parentElement">
+        <div class="child">Child 1</div>
+    </div>
+
+    <button onclick="addChild()">添加新元素</button>
+
+    <script>
+        function addChild() {
+            var parentElement = document.getElementById('parentElement');
+            var newChild = document.createElement('div');
+            newChild.className = 'child';
+            newChild.textContent = 'New Child';
+            parentElement.appendChild(newChild);
+
+            // 触发过渡效果
+            requestAnimationFrame(function() {
+                parentElement.style.height = parentElement.scrollHeight + 'px';
+            });
+        }
+    </script>
+</body>
+</html>

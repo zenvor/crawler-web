@@ -16,3 +16,13 @@ body {
   margin: 0;
   line-height: inherit;
 }
+
+@keyframes progress-stripes {
+  0% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: 2.5rem 0;
+  }
+}
