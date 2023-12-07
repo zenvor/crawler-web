@@ -53,7 +53,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', handleScroll)
 })
 
-const link = ref('https://chpic.su/en/stickers/natsumeyujincho')
+const link = ref('')
 const extractLink = ref('')
 const isInputFocus = ref(false)
 
