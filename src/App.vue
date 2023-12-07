@@ -4,7 +4,9 @@ import { extractions, downloadMultiple, downloadSingle } from '@/api/extract'
 import _ from 'lodash'
 import axios from 'axios'
 // 在组件中引入 JSON 数据
-import jsonData from '../public/response.json'
+import jsonData from '@/assets/response.json'
+
+import TypeLabel from '@/components/TypeLabel.vue'
 
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -14,7 +16,7 @@ import Dropdown from 'primevue/dropdown'
 import ToggleButton from 'primevue/togglebutton'
 import Paginator from 'primevue/paginator'
 import Image from 'primevue/image'
-import Tag from '@/components/Tag.vue'
+import Skeleton from 'primevue/skeleton'
 import Toast from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
 const toast = useToast()
@@ -30,17 +32,13 @@ const formatFileSize = (bytes) => {
 }
 
 const parseLink = (link) => {
+  if (!link) return
   // 创建一个URL对象，传入链接字符串
   let urlObj = new URL(link)
   // 获取URL对象的hostname属性，即域名
   let domain = urlObj.hostname
   // 返回域名
   return domain
-}
-
-const validateURL = (value) => {
-  const urlPattern = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
-  return urlPattern.test(value)
 }
 
 const isScrolled = ref(false)
@@ -55,21 +53,16 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', handleScroll)
 })
 
-const link = ref('')
+const link = ref('https://chpic.su/en/stickers/natsumeyujincho')
 const extractLink = ref('')
 const isInputFocus = ref(false)
-const images = ref([])
-const imagesClone = ref([])
-const extractLoading = ref(false)
-const disabled = ref(true)
-const pageNum = ref(1)
-const pageSize = ref(48)
-const total = ref(0)
-const totalPages = ref(0)
 
-watch(isInputFocus, (newVal) => {
-  console.log('newVal: ', newVal)
-})
+const validateURL = (value) => {
+  const urlPattern = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
+  return urlPattern.test(value)
+}
+
+const disabled = ref(true)
 
 // 使用 watch 监听 link
 watch(
@@ -85,6 +78,9 @@ watch(
   },
   { immediate: true }
 )
+
+const images = ref([])
+const total = ref(0)
 
 watch(images, () => {
   total.value = images.value.length
@@ -107,24 +103,17 @@ const selectionSortBy = ref('')
 const sortType = ref('desc')
 
 const selectionType = ref('')
-
+const listShow = ref(true)
 // 点解类型标签触发
-const handleTagClick = (key) => {
+const handleTypeLabelClick = (key) => {
+  listShow.value = false
+  nextTick(() => (listShow.value = true))
+
   if (selectionType.value == key) return (selectionType.value = undefined)
   selectionType.value = key
 }
 
-// 根据类型进行过滤
-const filterByType = () => {
-  const filterImages = imagesClone.value.filter((item) => {
-    if (selectionType.value) {
-      return item.type == selectionType.value
-    } else {
-      return item
-    }
-  })
-  return filterImages
-}
+const imagesClone = ref([])
 
 const searchQuery = ref('')
 // 判断一个字符串是否可以转化为数字
@@ -173,10 +162,20 @@ const fuzzySearch = (images) => {
   }
 }
 
+// 根据类型进行过滤
+const filterByType = () => {
+  const filterImages = imagesClone.value.filter((item) => {
+    if (selectionType.value) {
+      return item.type == selectionType.value
+    } else {
+      return item
+    }
+  })
+  return filterImages
+}
+
 // 整理数据
 const disposalData = () => {
-  currentPageData.value = []
-
   images.value = _.orderBy(fuzzySearch(filterByType()), [selectionSortBy.value], [sortType.value])
 }
 
@@ -204,6 +203,10 @@ watch(selectionType, () => disposalData())
 // 图片背景反色
 const isInvertBackground = ref(false)
 
+const pageNum = ref(1)
+const pageSize = ref(48)
+const totalPages = ref(0)
+
 // 当前页的数据
 const currentPageData = computed(() => {
   const start = (pageNum.value - 1) * pageSize.value
@@ -230,9 +233,15 @@ const extractionResultRef = ref(null)
 
 // 重置参数
 const reset = () => {
+  message.value = 'Waiting for browser...'
+  process.value = 5
+
   allTypes.value = {}
   selectionSortBy.value = ''
   selectionType.value = ''
+
+  extractLink.value = ''
+
   total.value = 0
   images.value = []
   imagesClone.value = []
@@ -249,19 +258,36 @@ const findAllTypes = () => {
       allTypes.value[type] = 1
     }
   })
-  console.log('allTypes.value', allTypes.value)
 }
+
+const extractLoading = ref(false)
+const process = ref(5)
+const message = ref('Waiting for browser...')
 
 // 提取图片
 const handleExtract = async () => {
+  // 获取当前页面的完整 URL
+  const currentUrl = window.location.href
+  // 从 URL 中解析出主机部分（包含 IP 地址）
+  const parser = new URL(currentUrl)
+  const ipAddress = parser.hostname
+
+  const ws = new WebSocket(`ws://${ipAddress}:8080`)
+
+  ws.onmessage = ({ data }) => {
+    const parseData = JSON.parse(data)
+    console.log('from ws data: ', parseData)
+    message.value = parseData.message
+    process.value = parseData.process
+  }
+
   try {
+    reset()
+
     extractLoading.value = true
 
-    setTimeout(() => {
-    reset()
-    }, 500)
-
     images.value = (await extractions(link.value)).data
+
     // images.value = jsonData.data
 
     extractLink.value = link.value
@@ -302,60 +328,62 @@ const handleItemClick = (item) => {
   item.checked ? (item.checked = false) : (item.checked = true)
 }
 
-let deselectAllDisabled = ref(true)
-
-watch(
-  images,
-  (newVal) => {
-    deselectAllDisabled = !newVal.some((item) => item.checked == true)
-  },
-  { deep: true }
-)
-
 let selectAllDisabled = ref(false)
+let deselectAllDisabled = ref(true)
+let selectedCount = ref(0)
+
 watch(
   images,
   (newVal) => {
-    selectAllDisabled = newVal.every((item) => item.checked == true)
+    if (selectionType.value) newVal = newVal.filter((item) => item.type == selectionType.value)
+    selectedCount.value = newVal.filter((item) => item.checked).length
+    selectAllDisabled.value = newVal.every((item) => item.checked)
+    deselectAllDisabled.value = !newVal.some((item) => item.checked)
   },
   { deep: true }
 )
+
+const selectAllOrDeselectAll = (array, boolean) => {
+  array.forEach((item) => {
+    if (selectionType.value) {
+      if (item.type == selectionType.value) item.checked = boolean
+    } else {
+      item.checked = boolean
+    }
+  })
+}
 
 // 选中全部
 const handleSelectAll = () => {
-  images.value.forEach((item) => {
-    item.checked = true
-  })
-
-  imagesClone.value.forEach((item) => {
-    item.checked = true
-  })
+  selectAllOrDeselectAll(images.value, true)
+  selectAllOrDeselectAll(imagesClone.value, true)
 }
 
 // 取消选中全部
 const handleDeselectAll = () => {
-  images.value.forEach((item) => {
-    item.checked = false
-  })
-
-  imagesClone.value.forEach((item) => {
-    item.checked = false
-  })
+  selectAllOrDeselectAll(images.value, false)
+  selectAllOrDeselectAll(imagesClone.value, false)
 }
 
-const imageErrors = ref([])
-const handleImageError = (id) => {
-  imageErrors.value.push(id)
-
-  imageErrors.value.forEach((errorId) => {
-    for (let i = 0; i < images.value.length; i++) {
-      const item = images.value[i]
-      if (errorId == item.id) {
-        item.imageError = true
-        break
-      }
+const handleImageLoad = (id) => {
+  for (let i = 0; i < images.value.length; i++) {
+    const item = images.value[i]
+    if (item.id == id) {
+      item.imageLoaded = true
+      break
     }
-  })
+  }
+}
+
+const handleImageError = (id) => {
+  for (let i = 0; i < images.value.length; i++) {
+    const item = images.value[i]
+    if (item.id == id) {
+      item.imageLoaded = true
+      item.imageError = true
+      break
+    }
+  }
 }
 
 const downloadMultipleLoading = ref(false)
@@ -419,6 +447,10 @@ const handleDownload = async (type, imageId) => {
       life: 3000,
     })
   }
+}
+
+const handleOpenInNewTab = (url) => {
+  window.open(url)
 }
 
 const copyMultipleLoading = ref(false)
@@ -501,29 +533,20 @@ const copyTextToClipboard = (text) => {
       ]"
     >
       <div class="mx-auto transition-all w-full max-w-7xl px-6 sm:px-6 lg:px-8">
-        <div
-          :class="[
-            { '!py-3': isScrolled },
-            { 'text-white py-6': !isScrolled },
-            'box-border flex justify-between transition-all items-center',
-          ]"
-        >
+        <div :class="[{ '!py-3': isScrolled }, { 'text-white py-6': !isScrolled }, 'grid grid-cols-3 transition-all']">
           <div class="flex items-center space-x-6">
             <div class="flex items-center shrink-0">
-              <div>
-                <div href="/" class="flex">
-                  <a href="/">
-                    <img src="@/assets/logo.svg" class="logo block w-auto h-9" />
-                  </a>
-                  <div class="ml-3 text-sm font-medium flex flex-col">
-                    <a href="/">Image Extractor</a>
-                    <a
-                      style="color: #10b981"
-                      class="text-xs mt-[2px] leading-none inline-block hover:underline font-semibold text-primary-500"
-                      href="/"
-                      >0.1 Beta</a
-                    >
-                  </div>
+              <div href="/" class="flex">
+                <a href="/">
+                  <img src="@/assets/images/logo.svg" class="logo block w-auto h-9" />
+                </a>
+                <div class="ml-3 text-sm font-medium flex flex-col">
+                  <a href="/">Image Extractor</a>
+                  <a
+                    :class="[{ 'text-emerald-700': isScrolled }, 'text-xs mt-[2px] leading-none inline-block hover:underline font-semibold text-emerald-500']"
+                    href="/"
+                    >0.1 Beta</a
+                  >
                 </div>
               </div>
             </div>
@@ -537,9 +560,9 @@ const copyTextToClipboard = (text) => {
             >
           </div>
 
-          <div class="flex items-center justify-end">
+          <div class="flex items-center justify-end h-10">
             <div class="md:flex md:items-center">
-              <img src="@/assets/profile-photo.jpg" class="profile-photo rounded block w-auto h-9" />
+              <img src="@/assets/images/vite.svg" class="frame-logo rounded block w-auto h-9" />
             </div>
           </div>
         </div>
@@ -547,140 +570,20 @@ const copyTextToClipboard = (text) => {
     </nav>
 
     <main class="h-full">
-      <!-- <div
-        class="relative w-full max-w-3xl mx-auto bg-white rounded-tl-none shadow-2xl mt-28 rounded-xl"
-      >
-        <div
-          class="absolute top-0 left-0 right-0 flex items-end overflow-hidden text-sm -translate-y-full select-none"
-        >
-          <div
-            class="px-6 h-8 flex items-center font-semibold transition-all translate-y-0.5 bg-gray-300 cursor-pointer rounded-t-xl hover:bg-gray-200 !bg-white shadow-md !translate-y-0 z-10 !h-9"
-          >Single Site</div>
-          <div
-            class="px-6 h-8 flex items-center font-semibold transition-all translate-y-0.5 bg-gray-300 cursor-pointer rounded-t-xl hover:bg-gray-200"
-          >Multiple Sites</div>
-        </div>
-        <div
-          class="relative overflow-hidden"
-          style="transition-duration: 200ms; transition-property: height; transition-timing-function: ease; --duration: 200ms;"
-        >
-          <div class="p-6">
-            <form class="flex flex-col sm:flex-row gap-3">
-              <div class="flex-1">
-                <div class="relative w-full">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="icon-tabler icon-tabler-link absolute z-10 transition -translate-y-1/2 left-4 top-1/2"
-                    width="24px"
-                    height="24px"
-                    viewBox="0 0 24 24"
-                    stroke-width="2"
-                    stroke="currentColor"
-                    fill="none"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                    <path d="M9 15l6 -6" />
-                    <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
-                    <path
-                      d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"
-                    />
-                  </svg>
-                  <div class="relative">
-                    <input
-                      class="w-full px-3.5 placeholder-gray-400 transition border !border-gray-300 rounded-md shadow-sm focus:border-primary-600 bg-white pl-12 h-14 text-lg !bg-gray-50/50 pointer-events-none !shadow-none"
-                      placeholder="Enter any URL, like google.com"
-                      autofocus
-                      name="url"
-                      type="text"
-                      disabled
-                    />
-                    <div class="absolute flex gap-2 -translate-y-1/2 right-4 top-1/2"></div>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="submit"
-                class="relative inline-flex items-center justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num w-auto opacity-50 pointer-events-none h-14 text-lg px-6 bg-gray-800 hover:bg-gray-700 active:bg-gray-900 text-white px-6"
-                disabled
-              >
-                <div
-                  class="flex items-center justify-center overflow-hidden w-6 mr-2 -ml-2 transition-all"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="icon-tabler icon-tabler-loader w-5 animate-spin w-6"
-                    width="24px"
-                    height="24px"
-                    viewBox="0 0 24 24"
-                    stroke-width="2"
-                    stroke="currentColor"
-                    fill="none"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                    <path d="M12 6l0 -3" />
-                    <path d="M16.25 7.75l2.15 -2.15" />
-                    <path d="M18 12l3 0" />
-                    <path d="M16.25 16.25l2.15 2.15" />
-                    <path d="M12 18l0 3" />
-                    <path d="M7.75 16.25l-2.15 2.15" />
-                    <path d="M6 12l-3 0" />
-                    <path d="M7.75 7.75l-2.15 -2.15" />
-                  </svg>
-                </div>
-
-                <span class>Extract</span>
-              </button>
-            </form>
-          </div>
-        </div>
-        <div
-          class="relative overflow-hidden"
-          style="transition-duration: 200ms; transition-property: height; transition-timing-function: ease; --duration: 200ms;"
-        ></div>
-        <div
-          class="relative overflow-hidden"
-          style="transition-duration: 200ms; transition-property: height; transition-timing-function: ease; --duration: 200ms;"
-        >
-          <div class="p-6 !pt-0">
-            <div>
-              <div class="px-5 py-4 border border-gray-200 rounded-lg bg-gray-50">
-                <p class="mb-2 font-medium">Waiting for browser...</p>
-                <div class="relative h-2.5 overflow-hidden bg-gray-300 rounded-full">
-                  <div
-                    role="progressbar"
-                    class="h-full rounded-full transition-all duration-500 bg-primary-500"
-                    style="width: 15%; background-size: 1.25rem 1.25rem; background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent); animation: 1000ms linear 0s infinite normal none running progress-stripes;"
-                  ></div>
-                </div>
-                <div
-                  class="relative overflow-hidden"
-                  style="transition-duration: 200ms; transition-property: height; transition-timing-function: ease; --duration: 200ms;"
-                ></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div
-          class="relative overflow-hidden"
-          style="transition-duration: 200ms; transition-property: height; transition-timing-function: ease; --duration: 200ms;"
-        ></div>
-      </div>-->
-
       <div class="relative flex flex-col justify-center transition-all duration-300">
         <div class="absolute bg-zinc-800 h-[80%] pointer-events-none w-full top-0 inset-x-0"></div>
         <div class="py-12 relative z-10 pt-48">
-          <div class="mx-auto transition-all w-full max-w-7xl px-6 sm:px-4 lg:px-6">
+          <div class="mx-auto transition-all w-full max-w-7xl px-6 sm:px-6 lg:px-8">
             <div class="flex flex-col justify-center transition-all duration-500">
               <div>
                 <div class="text-center text-white">
                   <h1 class="mb-2 text-[3.25rem] leading-none font-extrabold">Extract images</h1>
                   <h2 class="text-xl text-gray-400">from any public website</h2>
                 </div>
-                <div class="relative w-full max-w-3xl mx-auto bg-white rounded-tl-none shadow-2xl mt-28 rounded-xl">
+
+                <div
+                  class="transition-all duration-200 relative w-full max-w-3xl mx-auto bg-white rounded-tl-none shadow-2xl mt-28 rounded-xl"
+                >
                   <div
                     class="absolute top-0 left-0 right-0 flex items-end overflow-hidden text-sm -translate-y-full select-none"
                   >
@@ -695,6 +598,7 @@ const copyTextToClipboard = (text) => {
                       Multiple Sites
                     </div>
                   </div>
+
                   <div
                     class="relative overflow-hidden"
                     style="
@@ -708,9 +612,6 @@ const copyTextToClipboard = (text) => {
                       <form class="flex flex-col sm:flex-row gap-3">
                         <div class="flex-1">
                           <span style="position: relative" class="relative p-input-icon-left w-full h-full">
-                            <!-- <i
-                              :class="['pi pi-link -translate-y-0.5']"
-                            />-->
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
                               :style="{
@@ -740,7 +641,7 @@ const copyTextToClipboard = (text) => {
                               @blur="isInputFocus = false"
                               size="large"
                               v-model="link"
-                              class="pl-16 text-xl w-full h-full border-4"
+                              class="pl-16 text-base w-full h-full border-4"
                               placeholder="Enter any URL, like google.com"
                             />
                           </span>
@@ -750,7 +651,7 @@ const copyTextToClipboard = (text) => {
                           :loading="extractLoading"
                           @click="handleExtract"
                           label="Extract"
-                          size="large"
+                          class="whitespace-nowrap !text-lg"
                         >
                           <template #loadingicon>
                             <div
@@ -787,39 +688,85 @@ const copyTextToClipboard = (text) => {
                       </form>
                     </div>
                   </div>
+
                   <div
                     class="relative overflow-hidden"
-                    style="
-                      transition-duration: 200ms;
-                      transition-property: height;
-                      transition-timing-function: ease;
-                      --duration: 200ms;
-                    "
-                  ></div>
-                  <div
-                    class="relative overflow-hidden"
-                    style="
-                      transition-duration: 200ms;
-                      transition-property: height;
-                      transition-timing-function: ease;
-                      --duration: 200ms;
-                    "
-                  ></div>
-                  <div
-                    class="relative overflow-hidden"
-                    style="
-                      transition-duration: 200ms;
-                      transition-property: height;
-                      transition-timing-function: ease;
-                      --duration: 200ms;
-                    "
-                  ></div>
+                    :style="{
+                      'transition-duration': '300ms',
+                      'transition-property': 'height',
+                      'transition-timing-function': 'ease',
+                      '--duration': '300ms',
+                      height: `${extractLoading ? '100' : '0'}px`,
+                    }"
+                  >
+                    <transition name="fade" mode="out-in">
+                      <div v-show="extractLoading" class="p-6 !pt-0">
+                        <div>
+                          <div class="px-5 py-4 border-2 border-gray-200 rounded-lg bg-gray-50">
+                            <p class="mb-2 font-medium">{{ message }}</p>
+                            <div class="relative h-2.5 overflow-hidden bg-gray-300 rounded-full">
+                              <div
+                                role="progressbar"
+                                class="h-full rounded-full transition-all duration-500 bg-emerald-500"
+                                :style="{
+                                  width: `${process}%`,
+                                  'background-size': '1.25rem 1.25rem',
+                                  'background-image': `linear-gradient(
+                                      45deg,
+                                      rgba(255, 255, 255, 0.15) 25%,
+                                      transparent 25%,
+                                      transparent 50%,
+                                      rgba(255, 255, 255, 0.15) 50%,
+                                      rgba(255, 255, 255, 0.15) 75%,
+                                      transparent 75%,
+                                      transparent
+                                    )`,
+                                  animation: '1000ms linear 0s infinite normal none running progress-stripes',
+                                }"
+                              ></div>
+                            </div>
+                            <div
+                              class="relative overflow-hidden"
+                              style="
+                                transition-duration: 200ms;
+                                transition-property: height;
+                                transition-timing-function: ease;
+                                --duration: 200ms;
+                              "
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                    </transition>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- 广告投放处 -->
+      <!-- <div class="placeholder">
+        <div class="mx-auto transition-all w-full max-w-screen-2xl px-6 sm:px-6 lg:px-8">
+          <div class="w-full advertisement py-10" align="center">
+            <Image alt="Image">
+              <template #image>
+                <img class="rounded-md" src="@/assets/images/IMG_20231030_183641.jpg" alt="image" />
+              </template>
+            </Image>
+            <ins
+              class="ads-by-google"
+              data-ad-test="off"
+              data-ad-client="ca-pub-9215090689604809"
+              data-ad-slot="8623243556"
+              data-ad-format="auto"
+              data-full-width-responsive="true"
+              style="display: block"
+            ></ins>
+          </div>
+        </div>
+      </div> -->
 
       <div ref="extractionResultRef" v-if="imagesClone.length" class="py-12" data-test-id="extraction-result">
         <div class="mx-auto transition-all w-full max-w-screen-2xl px-6 sm:px-6 lg:px-8">
@@ -875,14 +822,14 @@ const copyTextToClipboard = (text) => {
                       <div
                         class="flex flex-wrap gap-2 p-3 bg-white border-2 border-gray-300 rounded-md shadow-sm min-h-[44px]"
                       >
-                        <Tag
-                          @click="handleTagClick(key)"
+                        <TypeLabel
+                          @click="handleTypeLabelClick(key)"
                           v-for="(value, key) in allTypes"
                           :key="key"
                           :blur="selectionType ? key != selectionType : undefined"
                           :type="key"
                           :number="value"
-                        ></Tag>
+                        />
                       </div>
                     </div>
                     <div>
@@ -998,7 +945,10 @@ const copyTextToClipboard = (text) => {
                             <path d="M12 4l0 12" />
                           </svg>
                         </div>
-                        <span class>Download selected</span>
+                        <span>
+                          Download selected
+                          <span v-show="selectedCount">({{ selectedCount }})</span>
+                        </span>
                       </button>
 
                       <button
@@ -1073,8 +1023,7 @@ const copyTextToClipboard = (text) => {
               <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-5">
                 <div class>
                   Showing {{ currentPageData.length }} of {{ imagesClone.length }} images from
-                  <!-- FIXME: -->
-                  <strong>{{ parseLink(link) }}</strong>
+                  <strong>{{ parseLink(extractLink) }}</strong>
                 </div>
                 <div class="flex items-center mt-2 sm:mt-0 sm:ml-auto space-x-8">
                   <div class="flex space-x-0 select-none items-center">
@@ -1095,30 +1044,18 @@ const copyTextToClipboard = (text) => {
               </div>
 
               <div v-if="images.length">
-                <div class="list w-full grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div v-if="listShow" class="list w-full grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   <div
                     v-for="(item, index) in currentPageData"
                     :key="index"
                     @click="handleItemClick(item)"
-                    :class="[
-                      'relative flex p-3 sm:p-4 transition bg-white border-4 border-transparent shadow cursor-pointer rounded-xl hover:shadow-xl hover:-translate-y-2 group min-w-0 flex-col justify-between',
-                    ]"
+                    class="relative flex w-full p-3 sm:p-4 transition bg-white border-2 border-transparent shadow cursor-pointer rounded-xl hover:-translate-y-1 hover:shadow-lg group min-w-0 flex-col justify-between"
                   >
                     <div
-                      v-if="false"
                       :class="[
-                        'absolute z-10 flex justify-center items-center transition  group-hover:opacity-100 top-2 left-2 group-hover:scale-100',
-                        { 'scale-50 opacity-0': !item.checked },
-                      ]"
-                    >
-                      <Checkbox v-model="item.checked" :binary="true" />
-                    </div>
-
-                    <div
-                      :class="[
-                        { 'scale-100 opacity-100': item.checked },
+                        { 'scale-100': item.checked },
                         { 'scale-50 -rotate-45 opacity-0': !item.checked },
-                        'absolute z-20 flex items-center justify-center text-white rounded-full shadow top-2 left-2 w-7 h-7 bg-primary-500 transition',
+                        'absolute z-20 flex items-center justify-center text-white rounded-full shadow top-2 left-2 w-7 h-7 bg-emerald-500 transition',
                       ]"
                     >
                       <svg
@@ -1143,7 +1080,6 @@ const copyTextToClipboard = (text) => {
                         { '!scale-50 !opacity-0': item.checked },
                         'transition absolute z-10 scale-50 border border-gray-300 rounded-full shadow opacity-0 bg-gray-50 group-hover:opacity-100 top-2 left-2 w-7 h-7 group-hover:scale-100',
                       ]"
-                      :style="{ display: item.checked ? 'none' : '' }"
                     ></div>
 
                     <div
@@ -1159,16 +1095,26 @@ const copyTextToClipboard = (text) => {
                         <span class="text-gray-500 mx-0.5">x</span>
                         {{ item.height }}
                       </div>
+
                       <img
                         :src="item.url"
                         class="object-contain object-center max-w-full max-h-full rounded-bl-md"
                         loading="lazy"
                         @error="handleImageError(item.id)"
+                        @load="handleImageLoad(item.id)"
                         referrerpolicy="no-referrer"
                       />
 
+                      <Skeleton
+                        v-if="!item.imageLoaded"
+                        style="position: absolute; inset: 0"
+                        class="absolute inset-0"
+                        width="100%"
+                        height="100%"
+                      ></Skeleton>
+
                       <div
-                        v-if="item.imageError"
+                        v-else-if="item.imageError"
                         class="absolute inset-0 bg-amber-100 flex flex-col items-center justify-center text-center p-5 text-sm text-amber-700 font-medium"
                       >
                         <svg
@@ -1192,8 +1138,20 @@ const copyTextToClipboard = (text) => {
                         </svg>
                         <span class="mt-2">Image preview not available.</span>
                         <span class="text-xs mt-3">
-                          <button class="underline hover:text-amber-900 transition">Download</button> or
-                          <button class="underline hover:text-amber-900 transition">open in new tab</button> to view.
+                          <button
+                            class="underline hover:text-amber-900 transition"
+                            @click.stop="handleDownload('single', item.id)"
+                          >
+                            Download
+                          </button>
+                          or
+                          <button
+                            class="underline hover:text-amber-900 transition"
+                            @click.stop="handleOpenInNewTab(item.url)"
+                          >
+                            open in new tab
+                          </button>
+                          to view.
                         </span>
                       </div>
                     </div>
@@ -1204,7 +1162,7 @@ const copyTextToClipboard = (text) => {
                       </div>
                       <div class="flex justify-between flex-1">
                         <div class="flex items-center space-x-2">
-                          <Tag :type="item.type" />
+                          <TypeLabel :type="item.type" />
                           <div
                             class="size text-sm whitespace-nowrap font-medium text-gray-500 border border-gray-300 rounded px-1.5 h-6 flex items-center"
                           >
@@ -1215,9 +1173,10 @@ const copyTextToClipboard = (text) => {
                           <button
                             @click.stop="handleCopyUrl('single', item.url, item.id)"
                             type="submit"
+                            style="transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1)"
                             :class="[
                               { 'opacity-50 pointer-events-none': item.id == copyTextSingleImageId ? true : false },
-                              'relative inline-flex items-center justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num h-7 text-sm w-6 text-gray-800 hover-text-primary-600 !border-transparent',
+                              'relative inline-flex items-center justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num h-7 text-sm w-6 text-gray-800 hover:text-emerald-600',
                             ]"
                           >
                             <div v-show="item.id == copyTextSingleImageId ? true : false">
@@ -1264,9 +1223,10 @@ const copyTextToClipboard = (text) => {
                           <button
                             @click.stop="handleDownload('single', item.id)"
                             type="submit"
+                            style="transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1)"
                             :class="[
                               { 'opacity-50 pointer-events-none': item.id == downloadSingleImageId ? true : false },
-                              'relative inline-flex items-center flex justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num h-7 text-sm w-6 text-gray-800 hover-text-primary-600 !border-transparent',
+                              'relative inline-flex items-center justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num h-7 text-sm w-6 text-gray-800 hover:text-emerald-600',
                             ]"
                             data-test-id="download-image"
                           >
@@ -1360,12 +1320,12 @@ const copyTextToClipboard = (text) => {
         </div>
       </div>
 
-      <div class="py-12 mt-0">
+      <div v-if="!images.length" class="py-12 mt-0">
         <div class="mx-auto transition-all w-full max-w-3xl px-6 sm:px-6 lg:px-8">
           <dl class="grid mx-auto gap-y-10 gap-x-8 lg:gap-y-16">
             <div class="relative pl-16">
               <dt class="text-base font-semibold leading-7 text-gray-900">
-                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-primary-600">
+                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-emerald-600">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     class="icon-tabler icon-tabler-zoom-in-area-filled w-6 h-6 text-white"
@@ -1420,7 +1380,7 @@ const copyTextToClipboard = (text) => {
             </div>
             <div class="relative pl-16">
               <dt class="text-base font-semibold leading-7 text-gray-900">
-                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-primary-600">
+                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-emerald-600">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     class="icon-tabler icon-tabler-augmented-reality w-6 h-6 text-white"
@@ -1452,7 +1412,7 @@ const copyTextToClipboard = (text) => {
             </div>
             <div class="relative pl-16">
               <dt class="text-base font-semibold leading-7 text-gray-900">
-                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-primary-600">
+                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-emerald-600">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     class="icon-tabler icon-tabler-tool w-6 h-6 text-white"
@@ -1478,7 +1438,7 @@ const copyTextToClipboard = (text) => {
             </div>
             <div class="relative pl-16">
               <dt class="text-base font-semibold leading-7 text-gray-900">
-                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-primary-600">
+                <div class="absolute top-0 left-0 flex items-center justify-center rounded-lg w-11 h-11 bg-emerald-600">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     class="icon-tabler icon-tabler-download w-6 h-6 text-white"
@@ -1682,31 +1642,26 @@ const copyTextToClipboard = (text) => {
 
 <style scoped>
 .logo,
-.profile-photo {
+.frame-logo {
   will-change: filter;
   transition: filter 300ms;
 }
-.logo {
+.logo:hover {
   filter: drop-shadow(0 0 2em #1eb05c);
 }
 
-.profile-photo {
-  filter: drop-shadow(0 0 2em #c5b293);
+.frame-logo:hover {
+  filter: drop-shadow(0 0 2em #916cfe);
 }
 
-.bg-primary-500 {
-  --tw-bg-opacity: 1;
-  background-color: rgb(16 185 129 / var(--tw-bg-opacity));
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.border-primary-500 {
-  --tw-bg-opacity: 1;
-  border-color: rgb(16 185 129 / var(--tw-bg-opacity));
-}
-
-.hover-text-primary-600:hover {
-  --tw-text-opacity: 1;
-  color: rgb(5 150 105 / var(--tw-text-opacity));
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 /* @media (max-width: 815px) {
@@ -1785,6 +1740,15 @@ const copyTextToClipboard = (text) => {
   box-shadow: 0 0 0 0.25rem #a7f3d0;
 }
 
-.select-all {
+:deep(.p-inputtext.p-inputtext-lg) {
+  font-size: 1.125rem;
+}
+
+:deep(.p-button) {
+  justify-content: center;
+}
+
+:deep(.p-button-label) {
+  flex: none;
 }
 </style>
