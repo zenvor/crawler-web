@@ -1,10 +1,8 @@
 <script setup>
 import { ref, nextTick, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { extractions, downloadMultiple, downloadSingle } from '@/api/extract'
+import { extractions, matchingMechanism, downloadMultiple, downloadSingle } from '@/api/extract'
 import _ from 'lodash'
 import axios from 'axios'
-// 在组件中引入 JSON 数据
-import jsonData from '@/assets/response.json'
 
 import TypeLabel from '@/components/TypeLabel.vue'
 
@@ -20,6 +18,55 @@ import Skeleton from 'primevue/skeleton'
 import Toast from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
 const toast = useToast()
+
+const isScrolled = ref(false)
+const handleScroll = () => {
+  isScrolled.value = window.scrollY > 10
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', handleScroll)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', handleScroll)
+})
+
+const link = ref('')
+const websiteDomainName = ref('')
+const isInputFocus = ref(false)
+
+const validateURL = (value) => {
+  const urlRegex = /^(https?:\/\/\S+|file:\/\/\/[A-Za-z]:\/(\S+)|\/\S+)$/
+  return urlRegex.test(value)
+}
+
+const disabled = ref(true)
+
+// 使用 watch 监听 link
+watch(
+  link,
+  (newVal) => {
+    if (validateURL(newVal)) {
+      // 链接通过验证，解除按钮禁用状态
+      disabled.value = false
+    } else {
+      // 链接未通过验证，禁用按钮
+      disabled.value = true
+    }
+  },
+  { immediate: true }
+)
+
+const images = ref([])
+const id = ref('')
+const extractLoading = ref(false)
+const progress = ref(0)
+const message = ref('Waiting for browser...')
+const total = ref(0)
+
+watch(images, () => {
+  total.value = images.value.length
+})
 
 const formatFileSize = (bytes) => {
   if (bytes < 1024) {
@@ -41,51 +88,6 @@ const parseLink = (link) => {
   return domain
 }
 
-const isScrolled = ref(false)
-const handleScroll = () => {
-  isScrolled.value = window.scrollY > 50
-}
-
-onMounted(() => {
-  window.addEventListener('scroll', handleScroll)
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('scroll', handleScroll)
-})
-
-const link = ref('')
-const extractLink = ref('')
-const isInputFocus = ref(false)
-
-const validateURL = (value) => {
-  const urlPattern = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
-  return urlPattern.test(value)
-}
-
-const disabled = ref(true)
-
-// 使用 watch 监听 link
-watch(
-  link,
-  (newVal) => {
-    if (validateURL(newVal)) {
-      // 链接通过验证，解除按钮禁用状态
-      disabled.value = false
-    } else {
-      // 链接未通过验证，禁用按钮
-      disabled.value = true
-    }
-  },
-  { immediate: true }
-)
-
-const images = ref([])
-const total = ref(0)
-
-watch(images, () => {
-  total.value = images.value.length
-})
-
 const sortOptions = ref([
   { label: 'Image size', value: 'imageSize' },
   { label: 'File size', value: 'fileSize' },
@@ -99,15 +101,22 @@ const firstText = ref('Big')
 const lastText = ref('Small')
 const isAscending = ref(false) // 是否是升序
 
-const selectionSortBy = ref('')
+const selectionSortBy = ref('imageSize')
 const sortType = ref('desc')
 
 const selectionType = ref('')
+
 const listShow = ref(true)
-// 点解类型标签触发
-const handleTypeLabelClick = (key) => {
+
+const rerender = () => {
   listShow.value = false
   nextTick(() => (listShow.value = true))
+}
+
+// 点解类型标签触发
+const handleTypeLabelClick = (key) => {
+  if (Object.keys(allTypes.value).length < 2) return
+  rerender()
 
   if (selectionType.value == key) return (selectionType.value = undefined)
   selectionType.value = key
@@ -176,6 +185,8 @@ const filterByType = () => {
 
 // 整理数据
 const disposalData = () => {
+  console.log('selectionSortBy.value', selectionSortBy.value);
+  console.log('sortType.value', sortType.value);
   images.value = _.orderBy(fuzzySearch(filterByType()), [selectionSortBy.value], [sortType.value])
 }
 
@@ -206,6 +217,7 @@ const isInvertBackground = ref(false)
 const pageNum = ref(1)
 const pageSize = ref(48)
 const totalPages = ref(0)
+const paginatorRef = ref(null)
 
 // 当前页的数据
 const currentPageData = computed(() => {
@@ -215,40 +227,80 @@ const currentPageData = computed(() => {
   return images.value.slice(start, end)
 })
 
-const paginatorRef = ref(null)
 // 分页改变触发
 const handlePageChange = (event) => {
   const page = event.page + 1
   pageNum.value = page
+  
+  // 重新渲染
+  rerender()
 }
 
 // 改变分页
 const handleChangePage = ({ page }) => {
   pageNum.value = page + 1
   paginatorRef.value.changePage(page)
+
+  // 重新渲染
+  rerender()
 }
+
+// 匹配原图
+const isMatchTheOriginalImage = ref(false)
+const matchTheOriginalImageLoading = ref(false)
+
+watch(isMatchTheOriginalImage, async (newVal) => {
+  const mechanism = newVal ? 'original' : 'default'
+
+  matchTheOriginalImageLoading.value = true
+
+  const response = await matchingMechanism(id.value, mechanism)
+
+  if (!response.images.length) {
+    extractLoading.value = false
+
+    return toast.add({
+      severity: 'error',
+      summary: 'No image was extracted',
+      group: 'bc',
+      life: 3000,
+    })
+  }
+
+  allTypes.value = {}
+  pageNum.value = 1
+  pageSize.value = 48
+  totalPages.value = 0
+
+  images.value = response.images
+  imagesClone.value = _.cloneDeep(images.value)
+
+  disposalData()
+
+  // 重新渲染
+  rerender()
+
+  nextTick(() => {
+    const offsetTop = extractionResultRef.value?.offsetTop || 0
+    window.scrollTo({
+      top: offsetTop - 100,
+      behavior: 'smooth',
+    })
+  })
+
+  findAllTypes()
+
+  setTimeout(() => {
+    matchTheOriginalImageLoading.value = false
+  }, 500)
+})
 
 const allTypes = ref({})
 const extractionResultRef = ref(null)
 
-// 重置参数
-const reset = () => {
-  message.value = 'Waiting for browser...'
-  process.value = 5
-
-  allTypes.value = {}
-  selectionSortBy.value = ''
-  selectionType.value = ''
-
-  extractLink.value = ''
-
-  total.value = 0
-  images.value = []
-  imagesClone.value = []
-}
-
 // 查找所有类型
 const findAllTypes = () => {
+  selectionType.value = undefined
   images.value.map((item) => {
     const type = item.type
 
@@ -258,69 +310,6 @@ const findAllTypes = () => {
       allTypes.value[type] = 1
     }
   })
-}
-
-const extractLoading = ref(false)
-const process = ref(5)
-const message = ref('Waiting for browser...')
-
-// 提取图片
-const handleExtract = async () => {
-  // 获取当前页面的完整 URL
-  const currentUrl = window.location.href
-  // 从 URL 中解析出主机部分（包含 IP 地址）
-  const parser = new URL(currentUrl)
-  const ipAddress = parser.hostname
-
-  const ws = new WebSocket(`ws://${ipAddress}:8080`)
-
-  ws.onmessage = ({ data }) => {
-    const parseData = JSON.parse(data)
-    console.log('from ws data: ', parseData)
-    message.value = parseData.message
-    process.value = parseData.process
-  }
-
-  try {
-    reset()
-
-    extractLoading.value = true
-
-    images.value = (await extractions(link.value)).data
-
-    // images.value = jsonData.data
-
-    extractLink.value = link.value
-
-    if (!images.value.length)
-      toast.add({
-        severity: 'error',
-        summary: 'No image was extracted',
-        group: 'bc',
-        life: 3000,
-      })
-
-    imagesClone.value = _.cloneDeep(images.value)
-    selectionSortBy.value = 'imageSize'
-
-    setTimeout(() => {
-      extractLoading.value = false
-    }, 500)
-
-    nextTick(() => {
-      const offsetTop = extractionResultRef.value?.offsetTop || 0
-      window.scrollTo({
-        top: offsetTop - 60,
-        behavior: 'smooth',
-      })
-    })
-
-    findAllTypes()
-  } catch (error) {
-    setTimeout(() => {
-      extractLoading.value = false
-    }, 500)
-  }
 }
 
 // 点击卡片触发
@@ -407,6 +396,7 @@ const handleDownload = async (type, imageId) => {
 
     // 从响应中获取文件名
     let contentDisposition = response.headers['content-disposition']
+
     let filename
     if (contentDisposition) {
       let filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
@@ -519,6 +509,111 @@ const copyTextToClipboard = (text) => {
     })
   }
 }
+
+// 重置参数
+const reset = () => {
+  message.value = 'Waiting for browser...'
+  progress.value = 0
+
+  allTypes.value = {}
+  selectionSortBy.value = 'imageSize'
+  selectionType.value = ''
+
+  websiteDomainName.value = ''
+
+  total.value = 0
+  images.value = []
+  imagesClone.value = []
+}
+
+// 提取图片
+const handleExtract = async () => {
+  // pending
+  reset()
+
+  extractLoading.value = true
+
+  // images.value = jsonData.data
+  // imagesClone.value = _.cloneDeep(images.value)
+  // disposalData()
+  // return
+
+  // 获取当前页面的完整 URL
+  const currentUrl = window.location.href
+  // 从 URL 中解析出主机部分（包含 IP 地址）
+  const parser = new URL(currentUrl)
+  const ipAddress = parser.hostname
+
+  const ws = new WebSocket(`ws://${ipAddress}:8080`)
+
+  ws.onmessage = async ({ data }) => {
+    const parseData = JSON.parse(data)
+    console.log('from ws data: ', parseData)
+    message.value = parseData.message
+    progress.value = parseData.progress
+
+    try {
+      switch (parseData.progress) {
+        case 5:
+          // pending
+          ws.send(JSON.stringify({ status: 'pending' }))
+
+          const extraction = (await extractions('post', { url: link.value })).extraction
+
+          ws.send(JSON.stringify({ status: 'running' }))
+
+          id.value = extraction.id
+          websiteDomainName.value = extraction.url
+          break
+
+        case 20:
+          await extractions('get', { id: id.value })
+          break
+
+        case 100:
+          // done
+          ws.send(JSON.stringify({ status: 'done' }))
+
+          const response = await extractions('get', { id: id.value })
+
+          images.value = response.images
+
+          if (!images.value.length) {
+            extractLoading.value = false
+
+            return toast.add({
+              severity: 'error',
+              summary: 'No image was extracted',
+              group: 'bc',
+              life: 3000,
+            })
+          }
+
+
+          imagesClone.value = _.cloneDeep(images.value)
+
+          disposalData()
+
+          nextTick(() => {
+            const offsetTop = extractionResultRef.value?.offsetTop || 0
+            window.scrollTo({
+              top: offsetTop - 100,
+              behavior: 'smooth',
+            })
+          })
+
+          findAllTypes()
+
+          extractLoading.value = false
+
+          break
+      }
+    } catch (error) {
+      console.log('error: ', error)
+      extractLoading.value = false
+    }
+  }
+}
 </script>
 
 <template>
@@ -543,7 +638,10 @@ const copyTextToClipboard = (text) => {
                 <div class="ml-3 text-sm font-medium flex flex-col">
                   <a href="/">Image Extractor</a>
                   <a
-                    :class="[{ 'text-emerald-700': isScrolled }, 'text-xs mt-[2px] leading-none inline-block hover:underline font-semibold text-emerald-500']"
+                    :class="[
+                      { 'text-emerald-700': isScrolled },
+                      'text-xs mt-[2px] leading-none inline-block hover:underline font-semibold text-emerald-500',
+                    ]"
                     href="/"
                     >0.1 Beta</a
                   >
@@ -641,7 +739,7 @@ const copyTextToClipboard = (text) => {
                               @blur="isInputFocus = false"
                               size="large"
                               v-model="link"
-                              class="pl-16 text-base w-full h-full border-4"
+                              class="pl-16 h-14 text-base w-full"
                               placeholder="Enter any URL, like google.com"
                             />
                           </span>
@@ -688,19 +786,19 @@ const copyTextToClipboard = (text) => {
                       </form>
                     </div>
                   </div>
-
+                  <!-- progress -->
                   <div
                     class="relative overflow-hidden"
                     :style="{
-                      'transition-duration': '300ms',
+                      'transition-duration': '200ms',
                       'transition-property': 'height',
                       'transition-timing-function': 'ease',
-                      '--duration': '300ms',
+                      '--duration': '200ms',
                       height: `${extractLoading ? '100' : '0'}px`,
                     }"
                   >
                     <transition name="fade" mode="out-in">
-                      <div v-show="extractLoading" class="p-6 !pt-0">
+                      <div v-show="extractLoading" class="p-6 pt-0">
                         <div>
                           <div class="px-5 py-4 border-2 border-gray-200 rounded-lg bg-gray-50">
                             <p class="mb-2 font-medium">{{ message }}</p>
@@ -709,7 +807,7 @@ const copyTextToClipboard = (text) => {
                                 role="progressbar"
                                 class="h-full rounded-full transition-all duration-500 bg-emerald-500"
                                 :style="{
-                                  width: `${process}%`,
+                                  width: `${progress}%`,
                                   'background-size': '1.25rem 1.25rem',
                                   'background-image': `linear-gradient(
                                       45deg,
@@ -725,19 +823,102 @@ const copyTextToClipboard = (text) => {
                                 }"
                               ></div>
                             </div>
-                            <div
-                              class="relative overflow-hidden"
-                              style="
-                                transition-duration: 200ms;
-                                transition-property: height;
-                                transition-timing-function: ease;
-                                --duration: 200ms;
-                              "
-                            ></div>
                           </div>
                         </div>
                       </div>
                     </transition>
+                  </div>
+
+                  <!-- prompt -->
+                  <div
+                    v-show="false"
+                    class="relative overflow-hidden"
+                    style="
+                      transition-duration: 200ms;
+                      transition-property: height;
+                      transition-timing-function: ease;
+                      --duration: 200ms;
+                    "
+                  >
+                    <div class="p-6 pt-0">
+                      <div
+                        class="flex items-start px-5 py-4 rounded-xl bg-opacity-10 base-alert bg-blue-500 text-blue-900"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="icon-tabler icon-tabler-info-circle-filled shrink-0 drop-shadow-md text-blue-500 w-6 h-6 mr-3"
+                          width="24px"
+                          height="24px"
+                          viewBox="0 0 24 24"
+                          stroke-width="2"
+                          stroke="currentColor"
+                          fill="none"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                          <path
+                            d="M12 2c5.523 0 10 4.477 10 10a10 10 0 0 1 -19.995 .324l-.005 -.324l.004 -.28c.148 -5.393 4.566 -9.72 9.996 -9.72zm0 9h-1l-.117 .007a1 1 0 0 0 0 1.986l.117 .007v3l.007 .117a1 1 0 0 0 .876 .876l.117 .007h1l.117 -.007a1 1 0 0 0 .876 -.876l.007 -.117l-.007 -.117a1 1 0 0 0 -.764 -.857l-.112 -.02l-.117 -.006v-3l-.007 -.117a1 1 0 0 0 -.876 -.876l-.117 -.007zm.01 -3l-.127 .007a1 1 0 0 0 0 1.986l.117 .007l.127 -.007a1 1 0 0 0 0 -1.986l-.117 -.007z"
+                            stroke-width="0"
+                            fill="currentColor"
+                          ></path>
+                        </svg>
+                        <div>
+                          <div class="font-medium">
+                            We are experiencing a high load of requests. Your extraction is still in the queue and
+                            waiting to be picked up. Please wait a moment.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- error -->
+                  <div
+                    v-show="false"
+                    class="relative overflow-hidden"
+                    style="
+                      transition-duration: 200ms;
+                      transition-property: height;
+                      transition-timing-function: ease;
+                      --duration: 200ms;
+                    "
+                  >
+                    <div class="p-6 pt-0">
+                      <div
+                        class="flex items-start px-5 py-4 rounded-xl bg-opacity-10 base-alert bg-red-500 text-red-900"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="icon-tabler icon-tabler-alert-circle-filled shrink-0 drop-shadow-md text-red-500 w-6 h-6 mr-3"
+                          width="24px"
+                          height="24px"
+                          viewBox="0 0 24 24"
+                          stroke-width="2"
+                          stroke="currentColor"
+                          fill="none"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                          <path
+                            d="M12 2c5.523 0 10 4.477 10 10a10 10 0 0 1 -19.995 .324l-.005 -.324l.004 -.28c.148 -5.393 4.566 -9.72 9.996 -9.72zm.01 13l-.127 .007a1 1 0 0 0 0 1.986l.117 .007l.127 -.007a1 1 0 0 0 0 -1.986l-.117 -.007zm-.01 -8a1 1 0 0 0 -.993 .883l-.007 .117v4l.007 .117a1 1 0 0 0 1.986 0l.007 -.117v-4l-.007 -.117a1 1 0 0 0 -.993 -.883z"
+                            stroke-width="0"
+                            fill="currentColor"
+                          ></path>
+                        </svg>
+                        <div>
+                          <div class="mt-1 mb-2 text-lg font-bold leading-none">Extraction failed</div>
+                          <div class="font-medium">
+                            <div class="whitespace-pre-line">
+                              Something went wrong. Please check the website you provided and try again. If the problem
+                              persists, please contact us or try again later.
+                            </div>
+                            <!---->
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -820,7 +1001,8 @@ const copyTextToClipboard = (text) => {
                     <div>
                       <h5 class="mb-1 font-medium">Filter images by type</h5>
                       <div
-                        class="flex flex-wrap gap-2 p-3 bg-white border-2 border-gray-300 rounded-md shadow-sm min-h-[44px]"
+                        style="border-width: 1px"
+                        class="flex flex-wrap gap-2 p-3 bg-white hover:border-emerald-500 transition-all ease-linear border-gray-300 rounded-md shadow-sm min-h-[44px]"
                       >
                         <TypeLabel
                           @click="handleTypeLabelClick(key)"
@@ -833,35 +1015,55 @@ const copyTextToClipboard = (text) => {
                       </div>
                     </div>
                     <div>
-                      <div class>
-                        <label class="block mb-1 font-medium">Search for images</label>
-                        <div class="relative w-full">
-                          <div class="relative">
-                            <InputText
-                              type="text"
-                              v-model="searchQuery"
-                              @input="handleSearchQueryUpdate"
-                              class="w-full px-3.5 placeholder-gray-400 transition rounded"
-                              placeholder="Type to search..."
-                            />
+                      <label class="block mb-1 font-medium">Search for images</label>
+                      <div class="relative w-full">
+                        <div class="relative">
+                          <InputText
+                            type="text"
+                            v-model="searchQuery"
+                            @input="handleSearchQueryUpdate"
+                            class="w-full px-3.5 placeholder-gray-400 transition rounded"
+                            placeholder="Type to search..."
+                          />
 
-                            <div class="absolute flex gap-2 -translate-y-1/2 right-4 top-1/2"></div>
-                          </div>
+                          <div class="absolute flex gap-2 -translate-y-1/2 right-4 top-1/2"></div>
                         </div>
-                        <div class="mt-1.5 leading-tight text-xs text-gray-500">
-                          Find by URL, name, type and width/height.
-                        </div>
+                      </div>
+                      <div class="mt-1.5 leading-tight text-xs text-gray-500">
+                        Find by URL, name, type and width/height.
                       </div>
                     </div>
-                    <label class="flex items-start cursor-pointer">
-                      <Checkbox v-model="isInvertBackground" :binary="true" class="translate-y-1" />
-                      <div class="ml-2">
-                        <div class="font-medium select-none">Invert image preview background</div>
-                        <div class="mt-1 text-xs text-gray-500">
-                          Can't see some images? Change the image background to a dark color.
+                    <div>
+                      <label class="flex items-start cursor-pointer">
+                        <Checkbox v-model="isInvertBackground" :binary="true" class="translate-y-1" />
+                        <div class="ml-2">
+                          <div class="font-medium select-none">Invert image preview background</div>
+                          <div class="mt-1 text-xs text-gray-500">
+                            Can't see some images? Change the image background to a dark color.
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div>
+                      <label class="block mb-1 font-medium">Try to match the original image</label>
+                      <div class="relative w-full">
+                        <div class="relative">
+                          <ToggleButton
+                            :disabled="matchTheOriginalImageLoading"
+                            v-model="isMatchTheOriginalImage"
+                            onLabel="original"
+                            offLabel="default"
+                            class="w-full"
+                          />
+
+                          <div class="absolute flex gap-2 -translate-y-1/2 right-4 top-1/2"></div>
                         </div>
                       </div>
-                    </label>
+                      <div class="mt-1.5 leading-tight text-xs text-gray-500">
+                        Match the original image based on the thumbnail.
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div>
@@ -1023,7 +1225,7 @@ const copyTextToClipboard = (text) => {
               <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-5">
                 <div class>
                   Showing {{ currentPageData.length }} of {{ imagesClone.length }} images from
-                  <strong>{{ parseLink(extractLink) }}</strong>
+                  <strong>{{ parseLink(websiteDomainName) }}</strong>
                 </div>
                 <div class="flex items-center mt-2 sm:mt-0 sm:ml-auto space-x-8">
                   <div class="flex space-x-0 select-none items-center">
@@ -1043,7 +1245,7 @@ const copyTextToClipboard = (text) => {
                 </div>
               </div>
 
-              <div v-if="images.length">
+              <div v-if="images.length" class="relative">
                 <div v-if="listShow" class="list w-full grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   <div
                     v-for="(item, index) in currentPageData"
@@ -1155,6 +1357,7 @@ const copyTextToClipboard = (text) => {
                         </span>
                       </div>
                     </div>
+
                     <div class="flex-1 min-w-0 mt-3">
                       <div class="mb-2 text-sm font-semibold truncate">
                         <span v-if="item.name">{{ item.name }}</span>
@@ -1283,16 +1486,38 @@ const copyTextToClipboard = (text) => {
                     </div>
                   </div>
                 </div>
-                <div class="flex justify-center mt-10">
-                  <Paginator
-                    :alwaysShow="false"
-                    v-show="total"
-                    :rows="pageSize"
-                    :totalRecords="total"
-                    @page="handlePageChange"
-                    ref="paginatorRef"
-                    template="PrevPageLink PageLinks NextPageLink"
-                  ></Paginator>
+
+                <div
+                  v-show="matchTheOriginalImageLoading"
+                  class="absolute inset-0 z-10 list w-full grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+                >
+                  <div
+                    v-for="(item, index) in currentPageData"
+                    :key="index"
+                    class="relative flex w-full pointer-events-none p-3 sm:p-4 transition bg-white border-2 border-transparent cursor-pointer rounded-xl hover:-translate-y-0 group min-w-0 flex-col justify-between"
+                  >
+                    <div
+                      class="relative flex items-center justify-center overflow-hidden transition border rounded-md select-none aspect-square shrink-0 w-full bg-gray-100 border-gray-200,"
+                    >
+                      <Skeleton width="100%" height="100%"></Skeleton>
+                    </div>
+
+                    <div class="flex-1 min-w-0 mt-3">
+                      <div class="mb-2 text-sm font-semibold truncate">
+                        <Skeleton width="5rem" height="1.077rem"></Skeleton>
+                      </div>
+                      <div class="flex justify-between flex-1">
+                        <div class="flex items-center space-x-2">
+                          <Skeleton width="3.5rem" height="1.5rem"></Skeleton>
+                          <Skeleton width="3.5rem" height="1.5rem"></Skeleton>
+                        </div>
+                        <div class="flex gap-2 sm:gap-1 items-center">
+                          <Skeleton shape="circle" borderRadius="50%" size="1.5rem"></Skeleton>
+                          <Skeleton shape="circle" borderRadius="50%" size="1.5rem"></Skeleton>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1302,6 +1527,17 @@ const copyTextToClipboard = (text) => {
                   Try changing the filters or
                   <button class="underline">removing them</button>.
                 </div>
+              </div>
+
+              <div v-show="total && totalPages > 1" :class="[{ 'pointer-events-none': matchTheOriginalImageLoading }, 'flex justify-center mt-10']">
+                <Paginator
+                  :alwaysShow="false"
+                  :rows="pageSize"
+                  :totalRecords="total"
+                  @page="handlePageChange"
+                  ref="paginatorRef"
+                  template="PrevPageLink PageLinks NextPageLink"
+                ></Paginator>
               </div>
 
               <div class="w-full advertisement mt-16" align="center">
@@ -1724,15 +1960,6 @@ const copyTextToClipboard = (text) => {
 
 :deep(.p-input-icon-left > .p-inputtext) {
   padding-left: 3.1rem;
-}
-
-:deep(.p-dropdown-panel.p-component.p-ripple-disabled) {
-  transform: translateY(10px) !important;
-}
-
-:deep(.p-inputtext),
-:deep(.p-dropdown) {
-  border: 2px solid #ced4da;
 }
 
 :deep(.p-inputtext:enabled:focus),
