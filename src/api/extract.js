@@ -1,14 +1,29 @@
 import request from '@/utils/request'
 
-export function extractions(url) {
+export function extractions(requestMethod, params) {
+  if (requestMethod == 'get') {
+    return request({
+      url: `/extractions/${params.id}`,
+      method: 'get',
+    })
+  } else {
+    return request({
+      url: '/extractions',
+      method: 'post',
+      data: {
+        url: params.url
+      }
+    })
+  }
+}
+
+export function matchingMechanism(id, mechanism) {
   return request({
-    url: '/extractions',
-    method: 'post',
-    data: {
-      url
-    }
+    url: `/matchingMechanism/${id}/${mechanism}`,
+    method: 'get',
   })
 }
+
 
 export function downloadMultiple(imageIds) {
   return request({
@@ -16,8 +31,8 @@ export function downloadMultiple(imageIds) {
     method: 'post',
     responseType: 'blob',
     data: {
-      imageIds
-    }
+      imageIds,
+    },
   })
 }
 
@@ -27,7 +42,7 @@ export function downloadSingle(imageId) {
     method: 'post',
     responseType: 'blob',
     data: {
-      imageId
-    }
+      imageId,
+    },
   })
 }
