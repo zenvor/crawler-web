@@ -544,7 +544,8 @@ const handleExtract = async () => {
   const parser = new URL(currentUrl)
   const ipAddress = parser.hostname
 
-  const ws = new WebSocket(`ws://${ipAddress}:8080`)
+  // const ws = new WebSocket(`ws://${ipAddress}:8080`)
+  const ws = new WebSocket(import.meta.env.VITE_APP_BASE_WS_API)
 
   ws.onmessage = async ({ data }) => {
     const parseData = JSON.parse(data)
