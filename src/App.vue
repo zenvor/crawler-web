@@ -185,8 +185,8 @@ const filterByType = () => {
 
 // 整理数据
 const disposalData = () => {
-  console.log('selectionSortBy.value', selectionSortBy.value);
-  console.log('sortType.value', sortType.value);
+  console.log('selectionSortBy.value', selectionSortBy.value)
+  console.log('sortType.value', sortType.value)
   images.value = _.orderBy(fuzzySearch(filterByType()), [selectionSortBy.value], [sortType.value])
 }
 
@@ -231,7 +231,7 @@ const currentPageData = computed(() => {
 const handlePageChange = (event) => {
   const page = event.page + 1
   pageNum.value = page
-  
+
   // 重新渲染
   rerender()
 }
@@ -258,6 +258,8 @@ watch(isMatchTheOriginalImage, async (newVal) => {
 
   if (!response.images.length) {
     extractLoading.value = false
+    isMatchTheOriginalImage.value = false
+    matchTheOriginalImageLoading.value = false
 
     return toast.add({
       severity: 'error',
@@ -283,7 +285,7 @@ watch(isMatchTheOriginalImage, async (newVal) => {
   nextTick(() => {
     const offsetTop = extractionResultRef.value?.offsetTop || 0
     window.scrollTo({
-      top: offsetTop - 100,
+      top: offsetTop,
       behavior: 'smooth',
     })
   })
@@ -520,6 +522,7 @@ const reset = () => {
   selectionType.value = ''
 
   websiteDomainName.value = ''
+  isMatchTheOriginalImage.value = false
 
   total.value = 0
   images.value = []
@@ -544,6 +547,10 @@ const handleExtract = async () => {
   const parser = new URL(currentUrl)
   const ipAddress = parser.hostname
 
+  const extraction = (await extractions('post', { url: link.value })).extraction
+  id.value = extraction.id
+  websiteDomainName.value = extraction.url
+
   // const ws = new WebSocket(`ws://${ipAddress}:8080`)
   const ws = new WebSocket(import.meta.env.VITE_APP_BASE_WS_API)
 
@@ -556,15 +563,7 @@ const handleExtract = async () => {
     try {
       switch (parseData.progress) {
         case 5:
-          // pending
-          ws.send(JSON.stringify({ status: 'pending' }))
-
-          const extraction = (await extractions('post', { url: link.value })).extraction
-
           ws.send(JSON.stringify({ status: 'running' }))
-
-          id.value = extraction.id
-          websiteDomainName.value = extraction.url
           break
 
         case 20:
@@ -589,7 +588,6 @@ const handleExtract = async () => {
               life: 3000,
             })
           }
-
 
           imagesClone.value = _.cloneDeep(images.value)
 
@@ -1530,7 +1528,10 @@ const handleExtract = async () => {
                 </div>
               </div>
 
-              <div v-show="total && totalPages > 1" :class="[{ 'pointer-events-none': matchTheOriginalImageLoading }, 'flex justify-center mt-10']">
+              <div
+                v-show="total && totalPages > 1"
+                :class="[{ 'pointer-events-none': matchTheOriginalImageLoading }, 'flex justify-center mt-10']"
+              >
                 <Paginator
                   :alwaysShow="false"
                   :rows="pageSize"
@@ -1712,15 +1713,15 @@ const handleExtract = async () => {
               <h2 class="text-3xl md:text-4xl font-semibold mb-5">Frequently asked questions</h2>
               <p class="text-gray-700">
                 If you can’t find what you’re looking for,
-                <a href="mailto:support@extract.pics" class="underline">write us a message</a> and we'll get back to
+                <a href="mailto:luckxiaomi@gmail.com" class="underline">write us a message</a> and we'll get back to
                 you.
               </p>
               <div class="grid lg:grid-cols-2 md:gap-x-16 gap-y-2 md:gap-y-3 mt-6">
                 <article>
-                  <h4 class="mt-10 text-lg font-semibold mb-3">What is extract.pics?</h4>
+                  <h4 class="mt-10 text-lg font-semibold mb-3">What is Image Extractor?</h4>
                   <p class="text-gray-700 text-base leading-relaxed prose max-w-none">
                     <span>
-                      Extract.pics is an easy to use tool that allows you to extract, view and download images from any
+                      Image Extractor is an easy to use tool that allows you to extract, view and download images from any
                       public website. Simply paste the URL of the website into the input field and click "Extract" to
                       start the process. After a few seconds you will see most or even all of the images found on the
                       website.
@@ -1753,7 +1754,7 @@ const handleExtract = async () => {
                 <article>
                   <h4 class="mt-10 text-lg font-semibold mb-3">Is it free?</h4>
                   <p class="text-gray-700 text-base leading-relaxed prose max-w-none">
-                    Yes, extract.pics is <strong>free to use</strong> without creating an account! <br />
+                    Yes, Image Extractor is <strong>free to use</strong> without creating an account! <br />
                     There is an hourly and daily limit on the number of extractions you can run to prevent abuse.
                     However, you can extend these limits by creating an account or subscribing to a premium plan.
                   </p>
@@ -1805,7 +1806,7 @@ const handleExtract = async () => {
                       cause issues.
                     </span>
                     <span>
-                      And sometimes there are a lot of people using extract.pics at the same time which can cause
+                      And sometimes there are a lot of people using Image Extractor at the same time which can cause
                       performance issues on our side. In this case you should try again later or try a different
                       website. We are continuously working on improving the performance of our service.
                     </span>
