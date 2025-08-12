@@ -17,6 +17,8 @@ import Image from 'primevue/image'
 import Skeleton from 'primevue/skeleton'
 import Toast from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
+import { useClipboard } from '@/composables/useClipboard'
+import { useDownload } from '@/composables/useDownload'
 const toast = useToast()
 
 const isScrolled = ref(false)
@@ -377,159 +379,29 @@ const handleImageError = (id) => {
   }
 }
 
-const downloadMultipleLoading = ref(false)
-const downloadSingleImageId = ref('')
+const { copyMultipleLoading, copyTextSingleImageId, copySingleUrl, copySelectedUrls } = useClipboard()
+const { downloadMultipleLoading, downloadSingleImageId, downloadSingleById, downloadSelectedByIds } = useDownload()
+
 const handleDownload = async (type, imageId) => {
-  try {
-    let response
-
-    if (type == 'single') {
-      downloadSingleImageId.value = imageId
-      response = await downloadSingle(imageId)
-    } else {
-      downloadMultipleLoading.value = true
-
-      const selectedImageIds = images.value.filter((item) => item.checked).map((item) => item.id)
-
-      selectedImageIds.length > 1
-        ? (response = await downloadMultiple(selectedImageIds))
-        : (response = await downloadSingle(...selectedImageIds))
-    }
-
-    // 从响应中获取文件名
-    let contentDisposition = response.headers['content-disposition']
-
-    let filename
-    if (contentDisposition) {
-      let filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
-      let matches = filenameRegex.exec(contentDisposition)
-      if (matches != null && matches[1]) {
-        filename = matches[1].replace(/['"]/g, '')
-      }
-    }
-
-    let url = window.URL.createObjectURL(new Blob([response.data]))
-    let link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', filename)
-    document.body.appendChild(link)
-    link.click()
-
-    toast.add({
-      severity: 'success',
-      summary: 'File downloaded',
-      detail: `Filename: ${filename}`,
-      group: 'bc',
-      life: 3000,
-    })
-    setTimeout(() => {
-      downloadMultipleLoading.value = false
-      downloadSingleImageId.value = ''
-    }, 500)
-  } catch (error) {
-    setTimeout(() => {
-      downloadMultipleLoading.value = false
-      downloadSingleImageId.value = ''
-    }, 500)
-    toast.add({
-      severity: 'error',
-      summary: 'File download failed',
-      detail: `Filename: ${filename}`,
-      group: 'bc',
-      life: 3000,
-    })
+  if (type === 'single') {
+    return downloadSingleById(imageId)
   }
+  const selectedImageIds = images.value.filter((item) => item.checked).map((item) => item.id)
+  return downloadSelectedByIds(selectedImageIds)
+}
+
+const handleCopyUrl = (type, url, imageId) => {
+  if (type === 'single') {
+    return copySingleUrl(url, imageId)
+  }
+  const selectedImageUrl = images.value.filter((item) => item.checked).map((item) => item.url)
+  return copySelectedUrls(selectedImageUrl)
 }
 
 const handleOpenInNewTab = (url) => {
   window.open(url)
 }
 
-const copyMultipleLoading = ref(false)
-const copyTextSingleImageId = ref('')
-const handleCopyUrl = (type, url, imageId) => {
-  try {
-    if (type == 'single') {
-      copyTextSingleImageId.value = imageId
-      copyTextToClipboard(url)
-      setTimeout(() => {
-        copyTextSingleImageId.value = ''
-      }, 1000)
-    } else {
-      copyMultipleLoading.value = true
-      const selectedImageUrl = images.value.filter((item) => item.checked).map((item) => item.url)
-
-      copyTextToClipboard(selectedImageUrl.join(','))
-      setTimeout(() => {
-        copyMultipleLoading.value = false
-      }, 1000)
-    }
-  } catch (error) {
-    setTimeout(() => {
-      copyMultipleLoading.value = false
-      copyTextSingleImageId.value = ''
-    }, 1000)
-  }
-}
-
-const copyTextToClipboard = (text) => {
-  function copyTextToClipboardFallback(text) {
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
-  }
-  try {
-    if (navigator.clipboard) {
-      navigator.clipboard
-        .writeText(text)
-        .then(() => {
-          console.log('文本已复制到剪贴板')
-        })
-        .catch((error) => {
-          console.error('复制文本到剪贴板失败', error)
-        })
-    } else {
-      // 如果浏览器不支持 Clipboard API，则回退到旧方法
-      console.log('Clipboard API 不受支持，尝试使用 document.execCommand 方法')
-      copyTextToClipboardFallback(text)
-    }
-    toast.add({
-      severity: 'success',
-      summary: 'Copy successfully',
-      group: 'bc',
-      life: 3000,
-    })
-  } catch (error) {
-    toast.add({
-      severity: 'error',
-      summary: 'Copy failure',
-      group: 'bc',
-      life: 3000,
-    })
-  }
-}
-
-// 重置参数
-const reset = () => {
-  message.value = 'Waiting for browser...'
-  progress.value = 0
-
-  allTypes.value = {}
-  selectionSortBy.value = 'imageSize'
-  selectionType.value = ''
-
-  websiteDomainName.value = ''
-  isMatchTheOriginalImage.value = false
-
-  total.value = 0
-  images.value = []
-  imagesClone.value = []
-}
-
-// 提取图片
 const handleExtract = async () => {
   // pending
   reset()
@@ -612,6 +484,23 @@ const handleExtract = async () => {
       extractLoading.value = false
     }
   }
+}
+
+// 重置参数
+const reset = () => {
+  message.value = 'Waiting for browser...'
+  progress.value = 0
+
+  allTypes.value = {}
+  selectionSortBy.value = 'imageSize'
+  selectionType.value = ''
+
+  websiteDomainName.value = ''
+  isMatchTheOriginalImage.value = false
+
+  total.value = 0
+  images.value = []
+  imagesClone.value = []
 }
 </script>
 
@@ -1712,7 +1601,7 @@ const handleExtract = async () => {
             <section>
               <h2 class="text-3xl md:text-4xl font-semibold mb-5">Frequently asked questions</h2>
               <p class="text-gray-700">
-                If you can’t find what you’re looking for,
+                If you can't find what you're looking for,
                 <a href="mailto:luckxiaomi@gmail.com" class="underline">write us a message</a> and we'll get back to
                 you.
               </p>
