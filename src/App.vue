@@ -414,7 +414,8 @@ const handleExtract = async () => {
     websiteDomainName.value = extraction.url
 
     // 使用 SSE 替代 WebSocket
-    const eventSource = new EventSource(`/api/extractions/${id.value}/stream`)
+    const baseUrl = import.meta.env.VITE_APP_BASE_API
+    const eventSource = new EventSource(`${baseUrl}/api/extractions/${id.value}/stream`)
 
     eventSource.onmessage = async (event) => {
       const data = JSON.parse(event.data)
