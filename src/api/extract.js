@@ -3,15 +3,17 @@ import request from '@/utils/request'
 export function extractions(requestMethod, params) {
   if (requestMethod == 'get') {
     return request({
-      url: `/extractions/${params.id}`,
+      url: `/api/extractions/${params.id}`,
       method: 'get',
     })
   } else {
     return request({
-      url: '/extractions',
+      url: '/api/extractions',
       method: 'post',
       data: {
-        url: params.url
+        url: params.url,
+        mode: params.mode || 'advanced',
+        ignoreInlineImages: params.ignoreInlineImages || false
       }
     })
   }
@@ -25,23 +27,25 @@ export function matchingMechanism(id, mechanism) {
 }
 
 
-export function downloadMultiple(imageIds) {
+export function downloadMultiple(extractionId, imageIds) {
   return request({
-    url: '/download/multiple',
+    url: '/api/downloads/multiple',
     method: 'post',
     responseType: 'blob',
     data: {
+      extractionId,
       imageIds,
     },
   })
 }
 
-export function downloadSingle(imageId) {
+export function downloadSingle(extractionId, imageId) {
   return request({
-    url: '/download/single',
+    url: '/api/downloads/single',
     method: 'post',
     responseType: 'blob',
     data: {
+      extractionId,
       imageId,
     },
   })
