@@ -384,10 +384,10 @@ const { downloadMultipleLoading, downloadSingleImageId, downloadSingleById, down
 
 const handleDownload = async (type, imageId) => {
   if (type === 'single') {
-    return downloadSingleById(imageId)
+    return downloadSingleById(id.value, imageId)
   }
   const selectedImageIds = images.value.filter((item) => item.checked).map((item) => item.id)
-  return downloadSelectedByIds(selectedImageIds)
+  return downloadSelectedByIds(id.value, selectedImageIds)
 }
 
 const handleCopyUrl = (type, url, imageId) => {
@@ -408,47 +408,31 @@ const handleExtract = async () => {
 
   extractLoading.value = true
 
-  // images.value = jsonData.data
-  // imagesClone.value = _.cloneDeep(images.value)
-  // disposalData()
-  // return
+  try {
+    const extraction = await extractions('post', { url: link.value, mode: 'advanced' })
+    id.value = extraction.id
+    websiteDomainName.value = extraction.url
 
-  // 获取当前页面的完整 URL
-  const currentUrl = window.location.href
-  // 从 URL 中解析出主机部分（包含 IP 地址）
-  const parser = new URL(currentUrl)
-  const ipAddress = parser.hostname
+    // 使用 SSE 替代 WebSocket
+    const eventSource = new EventSource(`/api/extractions/${id.value}/stream`)
 
-  const extraction = (await extractions('post', { url: link.value })).extraction
-  id.value = extraction.id
-  websiteDomainName.value = extraction.url
+    eventSource.onmessage = async (event) => {
+      const data = JSON.parse(event.data)
+      console.log('from SSE data: ', data)
 
-  // const ws = new WebSocket(`ws://${ipAddress}:8080`)
-  const ws = new WebSocket(import.meta.env.VITE_APP_BASE_WS_API)
+      try {
+        if (data.type === 'connected') {
+          console.log('SSE connection established')
+        } else if (data.type === 'progress') {
+          message.value = data.message
+          progress.value = data.progress
+        } else if (data.type === 'complete') {
+          eventSource.close()
 
-  ws.onmessage = async ({ data }) => {
-    const parseData = JSON.parse(data)
-    console.log('from ws data: ', parseData)
-    message.value = parseData.message
-    progress.value = parseData.progress
-
-    try {
-      switch (parseData.progress) {
-        case 5:
-          ws.send(JSON.stringify({ status: 'running' }))
-          break
-
-        case 20:
-          await extractions('get', { id: id.value })
-          break
-
-        case 100:
-          // done
-          ws.send(JSON.stringify({ status: 'done' }))
-
+          // 获取最终结果
           const response = await extractions('get', { id: id.value })
 
-          images.value = response.images
+          images.value = response.images || []
 
           if (!images.value.length) {
             extractLoading.value = false
@@ -476,13 +460,48 @@ const handleExtract = async () => {
           findAllTypes()
 
           extractLoading.value = false
+        } else if (data.type === 'error') {
+          eventSource.close()
+          extractLoading.value = false
 
-          break
+          toast.add({
+            severity: 'error',
+            summary: 'Extraction failed',
+            detail: data.message,
+            group: 'bc',
+            life: 3000,
+          })
+        }
+      } catch (error) {
+        console.log('error: ', error)
+        eventSource.close()
+        extractLoading.value = false
       }
-    } catch (error) {
-      console.log('error: ', error)
-      extractLoading.value = false
     }
+
+    eventSource.onerror = (error) => {
+      console.error('SSE error:', error)
+      eventSource.close()
+      extractLoading.value = false
+
+      toast.add({
+        severity: 'error',
+        summary: 'Connection error',
+        detail: 'Failed to connect to server',
+        group: 'bc',
+        life: 3000,
+      })
+    }
+  } catch (error) {
+    console.log('error: ', error)
+    extractLoading.value = false
+
+    toast.add({
+      severity: 'error',
+      summary: 'Failed to create extraction task',
+      group: 'bc',
+      life: 3000,
+    })
   }
 }
 

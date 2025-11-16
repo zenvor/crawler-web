@@ -24,23 +24,33 @@ service.interceptors.request.use(
 // 响应拦截器
 service.interceptors.response.use(
   (res) => {
-    // 未设置状态码则默认成功状态
-    const code = res.data.code || 200
-    // 获取错误信息
-    const msg = errorCode[code] || res.data.msg || errorCode['default']
     // 二进制数据则直接返回
     if (res.request.responseType === 'blob' || res.request.responseType === 'arraybuffer') {
       return res
     }
-    if (code === 401) {
-      return Promise.reject('无效的会话，或者会话已过期，请重新登录。')
-    } else if (code === 500) {
-      return Promise.reject(new Error(msg))
-    } else if (code !== 200) {
-      return Promise.reject('error')
-    } else {
+
+    // 新版 API 直接返回数据对象，不包含 code 字段
+    // 如果响应数据包含 error 字段，则认为是错误响应
+    if (res.data && res.data.error) {
+      return Promise.reject(new Error(res.data.error))
+    }
+
+    // 兼容旧版 API 格式
+    const code = res.data.code
+    if (code !== undefined) {
+      const msg = errorCode[code] || res.data.msg || errorCode['default']
+      if (code === 401) {
+        return Promise.reject('无效的会话，或者会话已过期，请重新登录。')
+      } else if (code === 500) {
+        return Promise.reject(new Error(msg))
+      } else if (code !== 200) {
+        return Promise.reject('error')
+      }
       return res.data
     }
+
+    // 新版 API 直接返回数据
+    return res.data
   },
   (error) => {
     console.log('err' + error)
