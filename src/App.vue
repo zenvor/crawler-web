@@ -30,12 +30,15 @@ const handleScroll = () => {
 }
 
 onMounted(() => {
+  console.log('[Lifecycle] 组件已挂载')
   window.addEventListener('scroll', handleScroll)
 })
 onBeforeUnmount(() => {
+  console.log('[Lifecycle] 组件即将卸载')
   window.removeEventListener('scroll', handleScroll)
   // 清理 WebSocket 连接
   if (ws) {
+    console.log('[Lifecycle] 清理 WebSocket 连接')
     ws.close()
     ws = null
   }
@@ -411,44 +414,58 @@ const handleOpenInNewTab = (url) => {
 }
 
 const handleExtract = async () => {
+  console.log('[Extract] ========== 开始新的提取任务 ==========')
+
   // pending
   reset()
 
   extractLoading.value = true
+  console.log('[Extract] extractLoading 设置为 true')
 
   try {
+    console.log('[Extract] 正在创建提取任务，URL:', link.value)
     const extraction = await extractions('post', { url: link.value, mode: 'advanced' })
     id.value = extraction.id
     websiteDomainName.value = extraction.url
+    console.log('[Extract] 任务创建成功，taskId:', id.value)
 
     // 使用 WebSocket 获取实时进度
     const wsUrl = import.meta.env.VITE_APP_BASE_WS_API
-    ws = new WebSocket(`${wsUrl}/?taskId=${id.value}`)
+    const wsFullUrl = `${wsUrl}/?taskId=${id.value}`
+    console.log('[Extract] 正在建立 WebSocket 连接:', wsFullUrl)
+    ws = new WebSocket(wsFullUrl)
 
     ws.onopen = () => {
-      console.log('WebSocket connection established')
+      console.log('[WebSocket] ✅ 连接已建立')
     }
 
     ws.onmessage = async (event) => {
       const data = JSON.parse(event.data)
-      console.log('from WebSocket data: ', data)
+      console.log('[WebSocket] 📨 收到消息:', data)
 
       try {
         if (data.type === 'connected') {
-          console.log('WebSocket connected:', data.message)
+          console.log('[WebSocket] 🔗 连接确认:', data.message)
         } else if (data.type === 'progress') {
+          console.log('[WebSocket] 📊 进度更新 - progress:', data.progress, 'message:', data.message)
+          console.log('[WebSocket] 更新前 - progress.value:', progress.value, 'message.value:', message.value)
           message.value = data.message
           progress.value = data.progress
+          console.log('[WebSocket] 更新后 - progress.value:', progress.value, 'message.value:', message.value)
         } else if (data.type === 'complete') {
+          console.log('[WebSocket] ✅ 任务完成，images_count:', data.images_count)
           ws.close()
           ws = null
 
           // 获取最终结果
+          console.log('[Extract] 正在获取最终结果...')
           const response = await extractions('get', { id: id.value })
+          console.log('[Extract] 获取到', response.images?.length || 0, '张图片')
 
           images.value = response.images || []
 
           if (!images.value.length) {
+            console.log('[Extract] ❌ 没有提取到图片')
             extractLoading.value = false
 
             return toast.add({
@@ -474,7 +491,9 @@ const handleExtract = async () => {
           findAllTypes()
 
           extractLoading.value = false
+          console.log('[Extract] ========== 提取任务完成 ==========')
         } else if (data.type === 'error') {
+          console.log('[WebSocket] ❌ 任务失败:', data.message)
           ws.close()
           ws = null
           extractLoading.value = false
@@ -488,7 +507,7 @@ const handleExtract = async () => {
           })
         }
       } catch (error) {
-        console.log('error: ', error)
+        console.error('[WebSocket] ❌ 处理消息时出错:', error)
         if (ws) {
           ws.close()
           ws = null
@@ -498,7 +517,7 @@ const handleExtract = async () => {
     }
 
     ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
+      console.error('[WebSocket] ❌ 连接错误:', error)
       if (ws) {
         ws.close()
         ws = null
@@ -514,12 +533,12 @@ const handleExtract = async () => {
       })
     }
 
-    ws.onclose = () => {
-      console.log('WebSocket connection closed')
+    ws.onclose = (event) => {
+      console.log('[WebSocket] 🔌 连接已关闭 - code:', event.code, 'reason:', event.reason, 'wasClean:', event.wasClean)
       ws = null
     }
   } catch (error) {
-    console.log('error: ', error)
+    console.error('[Extract] ❌ 创建任务失败:', error)
     extractLoading.value = false
 
     toast.add({
@@ -533,6 +552,8 @@ const handleExtract = async () => {
 
 // 重置参数
 const reset = () => {
+  console.log('[Reset] 开始重置参数...')
+
   message.value = 'Waiting for browser...'
   progress.value = 0
 
@@ -546,6 +567,15 @@ const reset = () => {
   total.value = 0
   images.value = []
   imagesClone.value = []
+
+  // 清理旧的 WebSocket 连接
+  if (ws) {
+    console.log('[Reset] 检测到旧的 WebSocket 连接，正在关闭...')
+    ws.close()
+    ws = null
+  }
+
+  console.log('[Reset] 重置完成，progress:', progress.value, 'message:', message.value)
 }
 </script>
 
