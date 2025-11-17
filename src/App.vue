@@ -1279,12 +1279,30 @@ const reset = () => {
                         'relative flex items-center justify-center overflow-hidden transition border rounded-md select-none aspect-square shrink-0 w-full bg-gray-100 border-gray-200',
                       ]"
                     >
+                      <!-- 右上角：分辨率 -->
                       <div
                         class="absolute top-0 right-0 py-0.5 px-1.5 text-xs font-semibold bg-white border border-t-0 border-r-0 border-gray-300 rounded-bl-md flex items-center shadow-sm text-gray-700"
                       >
                         {{ item.width }}
                         <span class="text-gray-500 mx-0.5">x</span>
                         {{ item.height }}
+                      </div>
+
+                      <!-- 左上角：图片尺寸 -->
+                      <div
+                        class="absolute top-0 left-0 py-0.5 px-1.5 text-xs font-semibold bg-emerald-50 border border-t-0 border-l-0 border-emerald-300 rounded-br-md flex items-center shadow-sm text-emerald-700"
+                        :title="'Image size: ' + item.imageSize + ' pixels'"
+                      >
+                        {{ formatImageSize(item.imageSize) }}
+                      </div>
+
+                      <!-- 左上角下方：文件大小 -->
+                      <div
+                        class="absolute left-0 py-0.5 px-1.5 text-xs font-semibold bg-white border border-l-0 border-gray-300 rounded-br-md flex items-center shadow-sm text-gray-700"
+                        :style="{ top: '20px' }"
+                        :title="'File size: ' + item.fileSize + ' bytes'"
+                      >
+                        {{ formatFileSize(item.fileSize) }}
                       </div>
 
                       <img
@@ -1355,18 +1373,6 @@ const reset = () => {
                       <div class="flex justify-between flex-1">
                         <div class="flex items-center space-x-2">
                           <TypeLabel :type="item.type" />
-                          <div
-                            class="size text-sm whitespace-nowrap font-medium text-emerald-600 border border-emerald-300 bg-emerald-50 rounded px-1.5 h-6 flex items-center"
-                            :title="'Image size: ' + item.imageSize + ' pixels'"
-                          >
-                            {{ formatImageSize(item.imageSize) }}
-                          </div>
-                          <div
-                            class="size text-sm whitespace-nowrap font-medium text-gray-500 border border-gray-300 rounded px-1.5 h-6 flex items-center"
-                            :title="'File size: ' + item.fileSize + ' bytes'"
-                          >
-                            {{ formatFileSize(item.fileSize) }}
-                          </div>
                         </div>
                         <div class="flex gap-2 sm:gap-1 items-center">
                           <button
