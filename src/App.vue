@@ -4,6 +4,9 @@ import { extractions, matchingMechanism, downloadMultiple, downloadSingle } from
 import _ from 'lodash'
 import axios from 'axios'
 
+// WebSocket 连接
+let ws = null
+
 import TypeLabel from '@/components/TypeLabel.vue'
 
 import Button from 'primevue/button'
@@ -31,6 +34,11 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', handleScroll)
+  // 清理 WebSocket 连接
+  if (ws) {
+    ws.close()
+    ws = null
+  }
 })
 
 const link = ref('')
@@ -413,22 +421,27 @@ const handleExtract = async () => {
     id.value = extraction.id
     websiteDomainName.value = extraction.url
 
-    // 使用 SSE 替代 WebSocket
-    const baseUrl = import.meta.env.VITE_APP_BASE_API
-    const eventSource = new EventSource(`${baseUrl}/api/extractions/${id.value}/stream`)
+    // 使用 WebSocket 获取实时进度
+    const wsUrl = import.meta.env.VITE_APP_BASE_WS_API
+    ws = new WebSocket(`${wsUrl}/?taskId=${id.value}`)
 
-    eventSource.onmessage = async (event) => {
+    ws.onopen = () => {
+      console.log('WebSocket connection established')
+    }
+
+    ws.onmessage = async (event) => {
       const data = JSON.parse(event.data)
-      console.log('from SSE data: ', data)
+      console.log('from WebSocket data: ', data)
 
       try {
         if (data.type === 'connected') {
-          console.log('SSE connection established')
+          console.log('WebSocket connected:', data.message)
         } else if (data.type === 'progress') {
           message.value = data.message
           progress.value = data.progress
         } else if (data.type === 'complete') {
-          eventSource.close()
+          ws.close()
+          ws = null
 
           // 获取最终结果
           const response = await extractions('get', { id: id.value })
@@ -462,7 +475,8 @@ const handleExtract = async () => {
 
           extractLoading.value = false
         } else if (data.type === 'error') {
-          eventSource.close()
+          ws.close()
+          ws = null
           extractLoading.value = false
 
           toast.add({
@@ -475,14 +489,20 @@ const handleExtract = async () => {
         }
       } catch (error) {
         console.log('error: ', error)
-        eventSource.close()
+        if (ws) {
+          ws.close()
+          ws = null
+        }
         extractLoading.value = false
       }
     }
 
-    eventSource.onerror = (error) => {
-      console.error('SSE error:', error)
-      eventSource.close()
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+      if (ws) {
+        ws.close()
+        ws = null
+      }
       extractLoading.value = false
 
       toast.add({
@@ -492,6 +512,11 @@ const handleExtract = async () => {
         group: 'bc',
         life: 3000,
       })
+    }
+
+    ws.onclose = () => {
+      console.log('WebSocket connection closed')
+      ws = null
     }
   } catch (error) {
     console.log('error: ', error)
