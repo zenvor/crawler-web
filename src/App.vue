@@ -91,6 +91,15 @@ const formatFileSize = (bytes) => {
   }
 }
 
+// 处理后端返回的图片数据,添加前端所需的字段
+const processImages = (images) => {
+  return images.map((img) => ({
+    ...img,
+    fileSize: img.size || 0, // 后端返回的 size 字段(字节数)
+    imageSize: (img.width || 0) * (img.height || 0), // 图片尺寸(像素总数)
+  }))
+}
+
 const parseLink = (link) => {
   if (!link) return
   // 创建一个URL对象，传入链接字符串
@@ -287,7 +296,7 @@ watch(isMatchTheOriginalImage, async (newVal) => {
   pageSize.value = 48
   totalPages.value = 0
 
-  images.value = response.images
+  images.value = processImages(response.images)
   imagesClone.value = _.cloneDeep(images.value)
 
   disposalData()
@@ -462,7 +471,7 @@ const handleExtract = async () => {
           const response = await extractions('get', { id: id.value })
           console.log('[Extract] 获取到', response.images?.length || 0, '张图片')
 
-          images.value = response.images || []
+          images.value = processImages(response.images || [])
 
           if (!images.value.length) {
             console.log('[Extract] ❌ 没有提取到图片')
