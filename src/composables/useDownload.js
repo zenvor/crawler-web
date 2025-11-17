@@ -30,12 +30,12 @@ export function useDownload() {
     window.URL.revokeObjectURL(url)
   }
 
-  async function downloadSingleById(imageId) {
-    if (!imageId) return
+  async function downloadSingleById(extractionId, imageId) {
+    if (!imageId || !extractionId) return
     let filename
     try {
       downloadSingleImageId.value = imageId
-      const response = await downloadSingle(imageId)
+      const response = await downloadSingle(extractionId, imageId)
       filename = extractFilenameFromHeaders(response.headers) || 'download'
       triggerBrowserDownload(response.data, filename)
       toast.add({ severity: 'success', summary: 'File downloaded', detail: `Filename: ${filename}`, group: 'bc', life: 3000 })
@@ -48,16 +48,16 @@ export function useDownload() {
     }
   }
 
-  async function downloadSelectedByIds(imageIds) {
-    if (!Array.isArray(imageIds) || imageIds.length === 0) return
+  async function downloadSelectedByIds(extractionId, imageIds) {
+    if (!Array.isArray(imageIds) || imageIds.length === 0 || !extractionId) return
     let filename
     try {
       downloadMultipleLoading.value = true
       let response
       if (imageIds.length > 1) {
-        response = await downloadMultiple(imageIds)
+        response = await downloadMultiple(extractionId, imageIds)
       } else {
-        response = await downloadSingle(imageIds[0])
+        response = await downloadSingle(extractionId, imageIds[0])
       }
       filename = extractFilenameFromHeaders(response.headers) || 'download'
       triggerBrowserDownload(response.data, filename)
