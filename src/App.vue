@@ -4,6 +4,9 @@ import { extractions, matchingMechanism, downloadMultiple, downloadSingle } from
 import _ from 'lodash'
 import axios from 'axios'
 
+// WebSocket 连接
+let ws = null
+
 import TypeLabel from '@/components/TypeLabel.vue'
 
 import Button from 'primevue/button'
@@ -27,10 +30,18 @@ const handleScroll = () => {
 }
 
 onMounted(() => {
+  console.log('[Lifecycle] 组件已挂载')
   window.addEventListener('scroll', handleScroll)
 })
 onBeforeUnmount(() => {
+  console.log('[Lifecycle] 组件即将卸载')
   window.removeEventListener('scroll', handleScroll)
+  // 清理 WebSocket 连接
+  if (ws) {
+    console.log('[Lifecycle] 清理 WebSocket 连接')
+    ws.close()
+    ws = null
+  }
 })
 
 const link = ref('')
@@ -384,10 +395,10 @@ const { downloadMultipleLoading, downloadSingleImageId, downloadSingleById, down
 
 const handleDownload = async (type, imageId) => {
   if (type === 'single') {
-    return downloadSingleById(imageId)
+    return downloadSingleById(id.value, imageId)
   }
   const selectedImageIds = images.value.filter((item) => item.checked).map((item) => item.id)
-  return downloadSelectedByIds(selectedImageIds)
+  return downloadSelectedByIds(id.value, selectedImageIds)
 }
 
 const handleCopyUrl = (type, url, imageId) => {
@@ -403,54 +414,58 @@ const handleOpenInNewTab = (url) => {
 }
 
 const handleExtract = async () => {
+  console.log('[Extract] ========== 开始新的提取任务 ==========')
+
   // pending
   reset()
 
   extractLoading.value = true
+  console.log('[Extract] extractLoading 设置为 true')
 
-  // images.value = jsonData.data
-  // imagesClone.value = _.cloneDeep(images.value)
-  // disposalData()
-  // return
+  try {
+    console.log('[Extract] 正在创建提取任务，URL:', link.value)
+    const extraction = await extractions('post', { url: link.value, mode: 'advanced' })
+    id.value = extraction.id
+    websiteDomainName.value = extraction.url
+    console.log('[Extract] 任务创建成功，taskId:', id.value)
 
-  // 获取当前页面的完整 URL
-  const currentUrl = window.location.href
-  // 从 URL 中解析出主机部分（包含 IP 地址）
-  const parser = new URL(currentUrl)
-  const ipAddress = parser.hostname
+    // 使用 WebSocket 获取实时进度
+    const wsUrl = import.meta.env.VITE_APP_BASE_WS_API
+    const wsFullUrl = `${wsUrl}/?taskId=${id.value}`
+    console.log('[Extract] 正在建立 WebSocket 连接:', wsFullUrl)
+    ws = new WebSocket(wsFullUrl)
 
-  const extraction = (await extractions('post', { url: link.value })).extraction
-  id.value = extraction.id
-  websiteDomainName.value = extraction.url
+    ws.onopen = () => {
+      console.log('[WebSocket] ✅ 连接已建立')
+    }
 
-  // const ws = new WebSocket(`ws://${ipAddress}:8080`)
-  const ws = new WebSocket(import.meta.env.VITE_APP_BASE_WS_API)
+    ws.onmessage = async (event) => {
+      const data = JSON.parse(event.data)
+      console.log('[WebSocket] 📨 收到消息:', data)
 
-  ws.onmessage = async ({ data }) => {
-    const parseData = JSON.parse(data)
-    console.log('from ws data: ', parseData)
-    message.value = parseData.message
-    progress.value = parseData.progress
+      try {
+        if (data.type === 'connected') {
+          console.log('[WebSocket] 🔗 连接确认:', data.message)
+        } else if (data.type === 'progress') {
+          console.log('[WebSocket] 📊 进度更新 - progress:', data.progress, 'message:', data.message)
+          console.log('[WebSocket] 更新前 - progress.value:', progress.value, 'message.value:', message.value)
+          message.value = data.message
+          progress.value = data.progress
+          console.log('[WebSocket] 更新后 - progress.value:', progress.value, 'message.value:', message.value)
+        } else if (data.type === 'complete') {
+          console.log('[WebSocket] ✅ 任务完成，images_count:', data.images_count)
+          ws.close()
+          ws = null
 
-    try {
-      switch (parseData.progress) {
-        case 5:
-          ws.send(JSON.stringify({ status: 'running' }))
-          break
-
-        case 20:
-          await extractions('get', { id: id.value })
-          break
-
-        case 100:
-          // done
-          ws.send(JSON.stringify({ status: 'done' }))
-
+          // 获取最终结果
+          console.log('[Extract] 正在获取最终结果...')
           const response = await extractions('get', { id: id.value })
+          console.log('[Extract] 获取到', response.images?.length || 0, '张图片')
 
-          images.value = response.images
+          images.value = response.images || []
 
           if (!images.value.length) {
+            console.log('[Extract] ❌ 没有提取到图片')
             extractLoading.value = false
 
             return toast.add({
@@ -476,18 +491,69 @@ const handleExtract = async () => {
           findAllTypes()
 
           extractLoading.value = false
+          console.log('[Extract] ========== 提取任务完成 ==========')
+        } else if (data.type === 'error') {
+          console.log('[WebSocket] ❌ 任务失败:', data.message)
+          ws.close()
+          ws = null
+          extractLoading.value = false
 
-          break
+          toast.add({
+            severity: 'error',
+            summary: 'Extraction failed',
+            detail: data.message,
+            group: 'bc',
+            life: 3000,
+          })
+        }
+      } catch (error) {
+        console.error('[WebSocket] ❌ 处理消息时出错:', error)
+        if (ws) {
+          ws.close()
+          ws = null
+        }
+        extractLoading.value = false
       }
-    } catch (error) {
-      console.log('error: ', error)
-      extractLoading.value = false
     }
+
+    ws.onerror = (error) => {
+      console.error('[WebSocket] ❌ 连接错误:', error)
+      if (ws) {
+        ws.close()
+        ws = null
+      }
+      extractLoading.value = false
+
+      toast.add({
+        severity: 'error',
+        summary: 'Connection error',
+        detail: 'Failed to connect to server',
+        group: 'bc',
+        life: 3000,
+      })
+    }
+
+    ws.onclose = (event) => {
+      console.log('[WebSocket] 🔌 连接已关闭 - code:', event.code, 'reason:', event.reason, 'wasClean:', event.wasClean)
+      ws = null
+    }
+  } catch (error) {
+    console.error('[Extract] ❌ 创建任务失败:', error)
+    extractLoading.value = false
+
+    toast.add({
+      severity: 'error',
+      summary: 'Failed to create extraction task',
+      group: 'bc',
+      life: 3000,
+    })
   }
 }
 
 // 重置参数
 const reset = () => {
+  console.log('[Reset] 开始重置参数...')
+
   message.value = 'Waiting for browser...'
   progress.value = 0
 
@@ -501,6 +567,15 @@ const reset = () => {
   total.value = 0
   images.value = []
   imagesClone.value = []
+
+  // 清理旧的 WebSocket 连接
+  if (ws) {
+    console.log('[Reset] 检测到旧的 WebSocket 连接，正在关闭...')
+    ws.close()
+    ws = null
+  }
+
+  console.log('[Reset] 重置完成，progress:', progress.value, 'message:', message.value)
 }
 </script>
 
