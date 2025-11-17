@@ -38,25 +38,44 @@ npm run dev
 ### 开发环境 (.env.development)
 ```
 VITE_APP_BASE_API = 'http://localhost:3000'
+VITE_APP_BASE_WS_API = 'ws://localhost:8080'
 ```
 
 ### 生产环境 (.env.production)
 ```
 VITE_APP_BASE_API = 'http://8.130.76.127:3000'
+VITE_APP_BASE_WS_API = 'ws://8.130.76.127:8080'
 ```
+
+## 架构说明
+
+项目使用双端口架构：
+- **HTTP API 端口 (3000)**: 处理 REST API 请求（创建任务、查询状态、下载等）
+- **WebSocket 端口 (8080)**: 处理实时进度推送
 
 ## API 端点
 
-所有 API 请求都会发送到：
+### HTTP REST API (端口 3000)
+所有 HTTP API 请求都会发送到：
 - 开发环境: http://localhost:3000/api/*
 - 生产环境: http://8.130.76.127:3000/api/*
 
-### 主要端点
+**主要端点：**
 - POST /api/extractions - 创建提取任务
 - GET /api/extractions/:id - 获取任务状态
-- GET /api/extractions/:id/stream - SSE 实时进度
 - POST /api/downloads/single - 下载单个图片
 - POST /api/downloads/multiple - 下载多个图片（ZIP）
+
+### WebSocket (端口 8080)
+实时进度推送：
+- 开发环境: ws://localhost:8080/?taskId=<TASK_ID>
+- 生产环境: ws://8.130.76.127:8080/?taskId=<TASK_ID>
+
+**消息类型：**
+- `{"type":"connected"}` - 连接建立
+- `{"type":"progress","message":"...","progress":20}` - 进度更新
+- `{"type":"complete","images_count":21}` - 任务完成
+- `{"type":"error","message":"..."}` - 任务失败
 
 ## 故障排除
 
@@ -69,23 +88,25 @@ Access to XMLHttpRequest at 'http://localhost:xxxx/api/extractions' from origin 
 
 **检查清单：**
 
-1. ✅ 确认后端服务运行在正确的端口（3000）
-2. ✅ 重启 Vite 开发服务器
+1. ✅ 确认 HTTP API 服务运行在正确的端口（3000）
+2. ✅ 确认 WebSocket 服务运行在正确的端口（8080）
+3. ✅ 重启 Vite 开发服务器
    ```bash
    # 停止服务器 (Ctrl+C)
    rm -rf node_modules/.vite
    npm run dev
    ```
-3. ✅ 清除浏览器缓存并硬性刷新
-4. ✅ 检查后端是否配置了正确的 CORS 设置
-5. ✅ 确认 .env.development 文件中的配置正确
+4. ✅ 清除浏览器缓存并硬性刷新
+5. ✅ 检查后端是否配置了正确的 CORS 设置
+6. ✅ 确认 .env.development 文件中的配置正确
 
-### SSE 连接失败
+### WebSocket 连接失败
 
-如果 SSE 连接失败：
-1. 确认后端支持 SSE（/api/extractions/:id/stream 端点）
-2. 检查网络请求，确认 URL 正确
+如果 WebSocket 连接失败：
+1. 确认 WebSocket 服务运行在端口 8080
+2. 检查网络请求，确认 URL 格式正确（ws://localhost:8080/?taskId=xxx）
 3. 查看浏览器控制台的错误信息
+4. 检查防火墙是否阻止了 8080 端口
 
 ## 构建生产版本
 
