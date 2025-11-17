@@ -1296,15 +1296,6 @@ const reset = () => {
                         {{ formatImageSize(item.imageSize) }}
                       </div>
 
-                      <!-- 左上角下方：文件大小 -->
-                      <div
-                        class="absolute left-0 py-0.5 px-1.5 text-xs font-semibold bg-white border border-l-0 border-gray-300 rounded-br-md flex items-center shadow-sm text-gray-700"
-                        :style="{ top: '20px' }"
-                        :title="'File size: ' + item.fileSize + ' bytes'"
-                      >
-                        {{ formatFileSize(item.fileSize) }}
-                      </div>
-
                       <img
                         :src="item.url"
                         class="object-contain object-center max-w-full max-h-full rounded-bl-md"
@@ -1373,6 +1364,12 @@ const reset = () => {
                       <div class="flex justify-between flex-1">
                         <div class="flex items-center space-x-2">
                           <TypeLabel :type="item.type" />
+                          <div
+                            class="size text-sm whitespace-nowrap font-medium text-gray-500 border border-gray-300 rounded px-1.5 h-6 flex items-center"
+                            :title="'File size: ' + item.fileSize + ' bytes'"
+                          >
+                            {{ formatFileSize(item.fileSize) }}
+                          </div>
                         </div>
                         <div class="flex gap-2 sm:gap-1 items-center">
                           <button
