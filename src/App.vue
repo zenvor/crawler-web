@@ -95,6 +95,8 @@ const formatFileSize = (bytes) => {
 const processImages = (images) => {
   return images.map((img) => ({
     ...img,
+    name: img.name || 'Unknown', // 为缺失的名称提供默认值
+    type: img.type || 'unknown', // 为缺失的类型提供默认值
     fileSize: img.size || 0, // 后端返回的 size 字段(字节数)
     imageSize: (img.width || 0) * (img.height || 0), // 图片尺寸(像素总数)
   }))
@@ -207,8 +209,6 @@ const filterByType = () => {
 
 // 整理数据
 const disposalData = () => {
-  console.log('selectionSortBy.value', selectionSortBy.value)
-  console.log('sortType.value', sortType.value)
   images.value = _.orderBy(fuzzySearch(filterByType()), [selectionSortBy.value], [sortType.value])
 }
 
@@ -569,6 +569,10 @@ const reset = () => {
   allTypes.value = {}
   selectionSortBy.value = 'imageSize'
   selectionType.value = ''
+
+  // 重置排序顺序为默认值(降序)
+  isAscending.value = false
+  sortType.value = 'desc'
 
   websiteDomainName.value = ''
   isMatchTheOriginalImage.value = false
