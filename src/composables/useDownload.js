@@ -38,9 +38,37 @@ export function useDownload() {
       const response = await downloadSingle(extractionId, imageId)
       filename = extractFilenameFromHeaders(response.headers) || 'download'
       triggerBrowserDownload(response.data, filename)
-      toast.add({ severity: 'success', summary: 'File downloaded', detail: `Filename: ${filename}`, group: 'bc', life: 3000 })
+      toast.add({
+        severity: 'success',
+        summary: 'Image downloaded successfully',
+        detail: `${filename}`,
+        group: 'bc',
+        life: 3000
+      })
     } catch (error) {
-      toast.add({ severity: 'error', summary: 'File download failed', detail: filename ? `Filename: ${filename}` : undefined, group: 'bc', life: 3000 })
+      console.error('Download error:', error)
+
+      // 尝试从 blob 响应中提取错误信息
+      let errorMessage = 'Unknown error'
+      if (error.response?.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text()
+          const errorData = JSON.parse(text)
+          errorMessage = errorData.error || errorMessage
+        } catch (e) {
+          errorMessage = error.message || errorMessage
+        }
+      } else {
+        errorMessage = error.response?.data?.error || error.message || errorMessage
+      }
+
+      toast.add({
+        severity: 'error',
+        summary: 'Download failed',
+        detail: errorMessage,
+        group: 'bc',
+        life: 5000
+      })
     } finally {
       setTimeout(() => {
         downloadSingleImageId.value = ''
@@ -61,9 +89,42 @@ export function useDownload() {
       }
       filename = extractFilenameFromHeaders(response.headers) || 'download'
       triggerBrowserDownload(response.data, filename)
-      toast.add({ severity: 'success', summary: 'File downloaded', detail: `Filename: ${filename}`, group: 'bc', life: 3000 })
+
+      const successMessage = imageIds.length > 1
+        ? `Successfully downloaded ${imageIds.length} images`
+        : 'Image downloaded successfully'
+
+      toast.add({
+        severity: 'success',
+        summary: successMessage,
+        detail: `${filename}`,
+        group: 'bc',
+        life: 3000
+      })
     } catch (error) {
-      toast.add({ severity: 'error', summary: 'File download failed', detail: filename ? `Filename: ${filename}` : undefined, group: 'bc', life: 3000 })
+      console.error('Download error:', error)
+
+      // 尝试从 blob 响应中提取错误信息
+      let errorMessage = 'Unknown error'
+      if (error.response?.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text()
+          const errorData = JSON.parse(text)
+          errorMessage = errorData.error || errorMessage
+        } catch (e) {
+          errorMessage = error.message || errorMessage
+        }
+      } else {
+        errorMessage = error.response?.data?.error || error.message || errorMessage
+      }
+
+      toast.add({
+        severity: 'error',
+        summary: 'Download failed',
+        detail: errorMessage,
+        group: 'bc',
+        life: 5000
+      })
     } finally {
       setTimeout(() => {
         downloadMultipleLoading.value = false
