@@ -91,6 +91,19 @@ const formatFileSize = (bytes) => {
   }
 }
 
+// 格式化图片尺寸(像素数转为百万像素 MP)
+const formatImageSize = (pixels) => {
+  if (pixels === 0) {
+    return '0 MP'
+  } else if (pixels < 1000000) {
+    // 小于1百万像素，显示千像素(KP)
+    return (pixels / 1000).toFixed(1) + ' KP'
+  } else {
+    // 大于等于1百万像素，显示百万像素(MP)
+    return (pixels / 1000000).toFixed(1) + ' MP'
+  }
+}
+
 // 处理后端返回的图片数据,添加前端所需的字段
 const processImages = (images) => {
   return images.map((img) => ({
@@ -1343,7 +1356,14 @@ const reset = () => {
                         <div class="flex items-center space-x-2">
                           <TypeLabel :type="item.type" />
                           <div
+                            class="size text-sm whitespace-nowrap font-medium text-emerald-600 border border-emerald-300 bg-emerald-50 rounded px-1.5 h-6 flex items-center"
+                            :title="'Image size: ' + item.imageSize + ' pixels'"
+                          >
+                            {{ formatImageSize(item.imageSize) }}
+                          </div>
+                          <div
                             class="size text-sm whitespace-nowrap font-medium text-gray-500 border border-gray-300 rounded px-1.5 h-6 flex items-center"
+                            :title="'File size: ' + item.fileSize + ' bytes'"
                           >
                             {{ formatFileSize(item.fileSize) }}
                           </div>
