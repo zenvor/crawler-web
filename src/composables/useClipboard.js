@@ -8,17 +8,27 @@ export function useClipboard() {
   const copyTextSingleImageId = ref('')
 
   function copyTextToClipboardFallback(text) {
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
+    try {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      // execCommand is deprecated but needed as fallback for older browsers
+      const success = document.execCommand('copy')
+      document.body.removeChild(textarea)
+      if (!success) {
+        throw new Error('execCommand returned false')
+      }
+    } catch (error) {
+      throw new Error('Fallback copy failed')
+    }
   }
 
   async function copyTextToClipboard(text) {
     try {
-      if (navigator.clipboard) {
+      if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text)
       } else {
         copyTextToClipboardFallback(text)
