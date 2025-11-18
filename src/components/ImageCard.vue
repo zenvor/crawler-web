@@ -122,6 +122,8 @@ const handleOpenInNewTab = (event) => {
         :src="item.url"
         class="object-contain object-center max-w-full max-h-full rounded-bl-md"
         loading="lazy"
+        decoding="async"
+        fetchpriority="low"
         @error="handleImageError"
         @load="handleImageLoad"
         referrerpolicy="no-referrer"
