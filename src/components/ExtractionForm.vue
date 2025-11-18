@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import RadioButton from 'primevue/radiobutton'
+import { validateUrl } from '@/utils/validation'
 
 const props = defineProps({
   extractLoading: Boolean,
@@ -18,21 +19,20 @@ const imageMode = ref('all')
 const showImageModeOptions = ref(false)
 const disabled = ref(true)
 
-const validateURL = (value) => {
-  const urlRegex = /^(https?:\/\/\S+|file:\/\/\/[A-Za-z]:\/(\S+)|\/\S+)$/
-  return urlRegex.test(value)
-}
-
 watch(
   link,
   (newVal) => {
-    disabled.value = !validateURL(newVal)
+    const result = validateUrl(newVal)
+    disabled.value = !result.valid
   },
   { immediate: true }
 )
 
 const handleExtract = () => {
-  emit('extract', link.value, imageMode.value)
+  const result = validateUrl(link.value)
+  if (result.valid) {
+    emit('extract', result.url, imageMode.value)
+  }
 }
 </script>
 

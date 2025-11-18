@@ -53,6 +53,12 @@ const onExtractionSuccess = (extractedImages) => {
   allImages.value = cloneDeep(extractedImages)
   filters.findAllTypes(extractedImages)
 
+  // Build image map for O(1) lookups
+  imageStates.clear()
+  extractedImages.forEach((image) => {
+    imageStates.set(image.id, image)
+  })
+
   nextTick(() => {
     const offsetTop = extractionResultRef.value?.offsetTop || 0
     window.scrollTo({
@@ -78,6 +84,12 @@ const onMatchOriginalSuccess = (matchedImages) => {
 
   allImages.value = cloneDeep(matchedImages)
   filters.findAllTypes(matchedImages)
+
+  // Build image map for O(1) lookups
+  imageStates.clear()
+  matchedImages.forEach((image) => {
+    imageStates.set(image.id, image)
+  })
 
   nextTick(() => {
     const offsetTop = extractionResultRef.value?.offsetTop || 0
@@ -107,14 +119,14 @@ const handleItemClick = (item) => {
 const imageStates = new Map()
 
 const handleImageLoad = (id) => {
-  const image = allImages.value.find((item) => item.id === id)
+  const image = imageStates.get(id)
   if (image) {
     image.imageLoaded = true
   }
 }
 
 const handleImageError = (id) => {
-  const image = allImages.value.find((item) => item.id === id)
+  const image = imageStates.get(id)
   if (image) {
     image.imageLoaded = true
     image.imageError = true
@@ -164,25 +176,23 @@ const handleDeselectAll = () => {
 }
 
 // Selection state (computed)
-const selectedCount = computed(() => {
-  const filteredImages = filters.selectionType.value
+// Get images filtered by selected type (if any)
+const typeFilteredImages = computed(() => {
+  return filters.selectionType.value
     ? images.value.filter((item) => item.type === filters.selectionType.value)
     : images.value
-  return filteredImages.filter((item) => item.checked).length
+})
+
+const selectedCount = computed(() => {
+  return typeFilteredImages.value.filter((item) => item.checked).length
 })
 
 const selectAllDisabled = computed(() => {
-  const filteredImages = filters.selectionType.value
-    ? images.value.filter((item) => item.type === filters.selectionType.value)
-    : images.value
-  return filteredImages.every((item) => item.checked)
+  return typeFilteredImages.value.every((item) => item.checked)
 })
 
 const deselectAllDisabled = computed(() => {
-  const filteredImages = filters.selectionType.value
-    ? images.value.filter((item) => item.type === filters.selectionType.value)
-    : images.value
-  return !filteredImages.some((item) => item.checked)
+  return !typeFilteredImages.value.some((item) => item.checked)
 })
 
 // Pagination handlers
