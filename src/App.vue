@@ -91,10 +91,25 @@ const formatFileSize = (bytes) => {
   }
 }
 
+// 格式化图片尺寸(像素数转为百万像素 MP)
+const formatImageSize = (pixels) => {
+  if (pixels === 0) {
+    return '0 MP'
+  } else if (pixels < 1000000) {
+    // 小于1百万像素，显示千像素(KP)
+    return (pixels / 1000).toFixed(1) + ' KP'
+  } else {
+    // 大于等于1百万像素，显示百万像素(MP)
+    return (pixels / 1000000).toFixed(1) + ' MP'
+  }
+}
+
 // 处理后端返回的图片数据,添加前端所需的字段
 const processImages = (images) => {
   return images.map((img) => ({
     ...img,
+    name: img.name || 'Unknown', // 为缺失的名称提供默认值
+    type: img.type || 'unknown', // 为缺失的类型提供默认值
     fileSize: img.size || 0, // 后端返回的 size 字段(字节数)
     imageSize: (img.width || 0) * (img.height || 0), // 图片尺寸(像素总数)
   }))
@@ -207,8 +222,6 @@ const filterByType = () => {
 
 // 整理数据
 const disposalData = () => {
-  console.log('selectionSortBy.value', selectionSortBy.value)
-  console.log('sortType.value', sortType.value)
   images.value = _.orderBy(fuzzySearch(filterByType()), [selectionSortBy.value], [sortType.value])
 }
 
@@ -569,6 +582,10 @@ const reset = () => {
   allTypes.value = {}
   selectionSortBy.value = 'imageSize'
   selectionType.value = ''
+
+  // 重置排序顺序为默认值(降序)
+  isAscending.value = false
+  sortType.value = 'desc'
 
   websiteDomainName.value = ''
   isMatchTheOriginalImage.value = false
@@ -1262,12 +1279,21 @@ const reset = () => {
                         'relative flex items-center justify-center overflow-hidden transition border rounded-md select-none aspect-square shrink-0 w-full bg-gray-100 border-gray-200',
                       ]"
                     >
+                      <!-- 右上角：分辨率 -->
                       <div
                         class="absolute top-0 right-0 py-0.5 px-1.5 text-xs font-semibold bg-white border border-t-0 border-r-0 border-gray-300 rounded-bl-md flex items-center shadow-sm text-gray-700"
                       >
                         {{ item.width }}
                         <span class="text-gray-500 mx-0.5">x</span>
                         {{ item.height }}
+                      </div>
+
+                      <!-- 左上角：图片尺寸 -->
+                      <div
+                        class="absolute top-0 left-0 py-0.5 px-1.5 text-xs font-semibold bg-emerald-50 border border-t-0 border-l-0 border-emerald-300 rounded-br-md flex items-center shadow-sm text-emerald-700"
+                        :title="'Image size: ' + item.imageSize + ' pixels'"
+                      >
+                        {{ formatImageSize(item.imageSize) }}
                       </div>
 
                       <img
@@ -1340,6 +1366,7 @@ const reset = () => {
                           <TypeLabel :type="item.type" />
                           <div
                             class="size text-sm whitespace-nowrap font-medium text-gray-500 border border-gray-300 rounded px-1.5 h-6 flex items-center"
+                            :title="'File size: ' + item.fileSize + ' bytes'"
                           >
                             {{ formatFileSize(item.fileSize) }}
                           </div>
