@@ -28,6 +28,7 @@ const imagesClone = ref([])
 const isInvertBackground = ref(false)
 const listShow = ref(true)
 const extractionResultRef = ref(null)
+const imageGridRef = ref(null)
 
 // Use composables
 const filters = useImageFilters(imagesClone)
@@ -202,7 +203,7 @@ const handlePageChange = (event) => {
 }
 
 const handleChangePage = ({ page }) => {
-  pagination.handleChangePage({ page })
+  pagination.handleChangePage({ page }, imageGridRef)
   rerender()
 }
 
@@ -261,6 +262,7 @@ onBeforeUnmount(() => {
             />
 
             <ImageGrid
+              ref="imageGridRef"
               :currentPageData="pagination.currentPageData.value"
               :total="pagination.total.value"
               :totalPages="pagination.totalPages.value"
@@ -272,7 +274,6 @@ onBeforeUnmount(() => {
               :downloadSingleImageId="downloadSingleImageId"
               :matchTheOriginalImageLoading="extraction.matchTheOriginalImageLoading.value"
               :listShow="listShow"
-              v-model:paginatorRef="pagination.paginatorRef.value"
               @itemClick="handleItemClick"
               @imageLoad="handleImageLoad"
               @imageError="handleImageError"
