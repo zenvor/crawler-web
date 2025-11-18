@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 export function usePagination(items, initialPageSize = 48) {
   const pageNum = ref(1)
   const pageSize = ref(initialPageSize)
-  const paginatorRef = ref(null)
 
   const totalPages = computed(() => {
     return Math.ceil(items.value.length / pageSize.value)
@@ -27,10 +26,10 @@ export function usePagination(items, initialPageSize = 48) {
   }
 
   // 改变分页
-  const handleChangePage = ({ page }) => {
+  const handleChangePage = ({ page }, imageGridRef) => {
     pageNum.value = page + 1
-    if (paginatorRef.value) {
-      paginatorRef.value.changePage(page)
+    if (imageGridRef?.value?.paginatorRef?.value) {
+      imageGridRef.value.paginatorRef.value.changePage(page)
     }
   }
 
@@ -45,7 +44,6 @@ export function usePagination(items, initialPageSize = 48) {
     totalPages,
     total,
     currentPageData,
-    paginatorRef,
     handlePageChange,
     handleChangePage,
     resetPagination

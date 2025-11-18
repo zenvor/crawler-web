@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue'
 import ImageCard from '@/components/ImageCard.vue'
 import Paginator from 'primevue/paginator'
 import Skeleton from 'primevue/skeleton'
@@ -28,7 +29,7 @@ const emit = defineEmits([
   'changePage'
 ])
 
-const paginatorRef = defineModel('paginatorRef')
+const paginatorRef = ref(null)
 
 const parseLink = (link) => {
   if (!link) return
@@ -36,6 +37,11 @@ const parseLink = (link) => {
   let domain = urlObj.hostname
   return domain
 }
+
+// Expose paginatorRef to parent component
+defineExpose({
+  paginatorRef
+})
 </script>
 
 <template>
