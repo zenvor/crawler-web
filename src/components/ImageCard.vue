@@ -193,11 +193,11 @@ const handleOpenInNewTab = (event) => {
             type="submit"
             style="transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1)"
             :class="[
-              { 'opacity-50 pointer-events-none': item.id == copyTextSingleImageId },
+              { 'opacity-50 pointer-events-none': item.id === copyTextSingleImageId },
               'relative inline-flex items-center justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num h-7 text-sm w-6 text-gray-800 hover:text-emerald-600',
             ]"
           >
-            <div v-show="item.id == copyTextSingleImageId">
+            <div v-show="item.id === copyTextSingleImageId">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 class="icon-tabler icon-tabler-check"
@@ -215,7 +215,7 @@ const handleOpenInNewTab = (event) => {
               </svg>
             </div>
 
-            <div v-show="item.id != copyTextSingleImageId">
+            <div v-show="item.id !== copyTextSingleImageId">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 class="icon-tabler icon-tabler-link"
@@ -240,12 +240,12 @@ const handleOpenInNewTab = (event) => {
             type="submit"
             style="transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1)"
             :class="[
-              { 'opacity-50 pointer-events-none': item.id == downloadSingleImageId },
+              { 'opacity-50 pointer-events-none': item.id === downloadSingleImageId },
               'relative inline-flex items-center justify-center font-medium transition border border-transparent rounded-md cursor-pointer select-none disabled:opacity-25 tabular-num h-7 text-sm w-6 text-gray-800 hover:text-emerald-600',
             ]"
             data-test-id="download-image"
           >
-            <div v-show="item.id == downloadSingleImageId" class="flex items-center justify-center overflow-hidden w-full">
+            <div v-show="item.id === downloadSingleImageId" class="flex items-center justify-center overflow-hidden w-full">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 class="icon-tabler icon-tabler-loader w-5 animate-spin w-full"
@@ -270,7 +270,7 @@ const handleOpenInNewTab = (event) => {
               </svg>
             </div>
 
-            <div v-show="item.id != downloadSingleImageId">
+            <div v-show="item.id !== downloadSingleImageId">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 class="icon-tabler icon-tabler-download"

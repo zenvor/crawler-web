@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { useToast } from 'primevue/usetoast'
-import { downloadMultiple, downloadSingle } from '@/api/extract'
+import { downloadApi } from '@/api/extract'
 
 export function useDownload() {
   const toast = useToast()
@@ -30,45 +30,46 @@ export function useDownload() {
     window.URL.revokeObjectURL(url)
   }
 
+  // 提取公共的错误处理逻辑
+  async function handleDownloadError(error) {
+    let errorMessage = 'Unknown error'
+    if (error.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text()
+        const errorData = JSON.parse(text)
+        errorMessage = errorData.error || errorMessage
+      } catch (e) {
+        errorMessage = error.message || errorMessage
+      }
+    } else {
+      errorMessage = error.response?.data?.error || error.message || errorMessage
+    }
+
+    toast.add({
+      severity: 'error',
+      summary: 'Download failed',
+      detail: errorMessage,
+      group: 'bc',
+      life: 5000,
+    })
+  }
+
   async function downloadSingleById(extractionId, imageId) {
     if (!imageId || !extractionId) return
-    let filename
     try {
       downloadSingleImageId.value = imageId
-      const response = await downloadSingle(extractionId, imageId)
-      filename = extractFilenameFromHeaders(response.headers) || 'download'
+      const response = await downloadApi.single(extractionId, imageId)
+      const filename = extractFilenameFromHeaders(response.headers) || 'download'
       triggerBrowserDownload(response.data, filename)
       toast.add({
         severity: 'success',
         summary: 'Image downloaded successfully',
         detail: `${filename}`,
         group: 'bc',
-        life: 3000
+        life: 3000,
       })
     } catch (error) {
-      console.error('Download error:', error)
-
-      // 尝试从 blob 响应中提取错误信息
-      let errorMessage = 'Unknown error'
-      if (error.response?.data instanceof Blob) {
-        try {
-          const text = await error.response.data.text()
-          const errorData = JSON.parse(text)
-          errorMessage = errorData.error || errorMessage
-        } catch (e) {
-          errorMessage = error.message || errorMessage
-        }
-      } else {
-        errorMessage = error.response?.data?.error || error.message || errorMessage
-      }
-
-      toast.add({
-        severity: 'error',
-        summary: 'Download failed',
-        detail: errorMessage,
-        group: 'bc',
-        life: 5000
-      })
+      await handleDownloadError(error)
     } finally {
       setTimeout(() => {
         downloadSingleImageId.value = ''
@@ -78,53 +79,28 @@ export function useDownload() {
 
   async function downloadSelectedByIds(extractionId, imageIds) {
     if (!Array.isArray(imageIds) || imageIds.length === 0 || !extractionId) return
-    let filename
     try {
       downloadMultipleLoading.value = true
-      let response
-      if (imageIds.length > 1) {
-        response = await downloadMultiple(extractionId, imageIds)
-      } else {
-        response = await downloadSingle(extractionId, imageIds[0])
-      }
-      filename = extractFilenameFromHeaders(response.headers) || 'download'
+      const response =
+        imageIds.length > 1
+          ? await downloadApi.multiple(extractionId, imageIds)
+          : await downloadApi.single(extractionId, imageIds[0])
+
+      const filename = extractFilenameFromHeaders(response.headers) || 'download'
       triggerBrowserDownload(response.data, filename)
 
-      const successMessage = imageIds.length > 1
-        ? `Successfully downloaded ${imageIds.length} images`
-        : 'Image downloaded successfully'
+      const successMessage =
+        imageIds.length > 1 ? `Successfully downloaded ${imageIds.length} images` : 'Image downloaded successfully'
 
       toast.add({
         severity: 'success',
         summary: successMessage,
         detail: `${filename}`,
         group: 'bc',
-        life: 3000
+        life: 3000,
       })
     } catch (error) {
-      console.error('Download error:', error)
-
-      // 尝试从 blob 响应中提取错误信息
-      let errorMessage = 'Unknown error'
-      if (error.response?.data instanceof Blob) {
-        try {
-          const text = await error.response.data.text()
-          const errorData = JSON.parse(text)
-          errorMessage = errorData.error || errorMessage
-        } catch (e) {
-          errorMessage = error.message || errorMessage
-        }
-      } else {
-        errorMessage = error.response?.data?.error || error.message || errorMessage
-      }
-
-      toast.add({
-        severity: 'error',
-        summary: 'Download failed',
-        detail: errorMessage,
-        group: 'bc',
-        life: 5000
-      })
+      await handleDownloadError(error)
     } finally {
       setTimeout(() => {
         downloadMultipleLoading.value = false
