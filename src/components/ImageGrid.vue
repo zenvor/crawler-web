@@ -57,8 +57,8 @@ defineExpose({
             <button
               @click="$emit('changePage', { page: index })"
               :class="[
-                { '!font-bold': item == index + 1 },
-                { 'text-gray-600': item != index + 1 },
+                { '!font-bold': item === index + 1 },
+                { 'text-gray-600': item !== index + 1 },
                 'px-1.5 py-0.5 rounded hover:bg-gray-200 transition tabular-nums font-medium',
               ]"
             >

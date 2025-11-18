@@ -1,6 +1,7 @@
 <script setup>
-import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
-import _ from 'lodash'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import orderBy from 'lodash/orderBy'
+import cloneDeep from 'lodash/cloneDeep'
 import Toast from 'primevue/toast'
 import { useClipboard } from '@/composables/useClipboard'
 import { useDownload } from '@/composables/useDownload'
@@ -23,22 +24,21 @@ const { copyMultipleLoading, copyTextSingleImageId, copySingleUrl, copySelectedU
 const { downloadMultipleLoading, downloadSingleImageId, downloadSingleById, downloadSelectedByIds } = useDownload()
 
 // ========== State Management ==========
-const images = ref([])
-const imagesClone = ref([])
+const allImages = ref([])
 const isInvertBackground = ref(false)
 const listShow = ref(true)
 const extractionResultRef = ref(null)
 const imageGridRef = ref(null)
 
 // Use composables
-const filters = useImageFilters(imagesClone)
+const filters = useImageFilters()
 const sort = useImageSort()
 
-// Apply filters and sorting
-const disposalData = () => {
-  const filteredImages = filters.applyFilters(imagesClone.value)
-  images.value = _.orderBy(filteredImages, [sort.selectionSortBy.value], [sort.sortType.value])
-}
+// Filtered and sorted images (computed)
+const images = computed(() => {
+  const filteredImages = filters.applyFilters(allImages.value)
+  return orderBy(filteredImages, [sort.selectionSortBy.value], [sort.sortType.value])
+})
 
 // Pagination
 const pagination = usePagination(images)
@@ -50,8 +50,8 @@ const handleExtract = async (link, imageMode) => {
 }
 
 const onExtractionSuccess = (extractedImages) => {
-  imagesClone.value = _.cloneDeep(extractedImages)
-  disposalData()
+  allImages.value = cloneDeep(extractedImages)
+  filters.findAllTypes(extractedImages)
 
   nextTick(() => {
     const offsetTop = extractionResultRef.value?.offsetTop || 0
@@ -60,23 +60,24 @@ const onExtractionSuccess = (extractedImages) => {
       behavior: 'smooth',
     })
   })
-
-  filters.findAllTypes(extractedImages)
 }
 
 // Match original handler
-watch(() => extraction.isMatchTheOriginalImage.value, async (newVal) => {
-  if (newVal !== undefined) {
-    await extraction.handleMatchOriginal(onMatchOriginalSuccess)
+watch(
+  () => extraction.isMatchTheOriginalImage.value,
+  async (newVal) => {
+    if (newVal !== undefined) {
+      await extraction.handleMatchOriginal(onMatchOriginalSuccess)
+    }
   }
-})
+)
 
 const onMatchOriginalSuccess = (matchedImages) => {
   filters.allTypes.value = {}
   pagination.resetPagination()
 
-  imagesClone.value = _.cloneDeep(matchedImages)
-  disposalData()
+  allImages.value = cloneDeep(matchedImages)
+  filters.findAllTypes(matchedImages)
 
   nextTick(() => {
     const offsetTop = extractionResultRef.value?.offsetTop || 0
@@ -85,24 +86,12 @@ const onMatchOriginalSuccess = (matchedImages) => {
       behavior: 'smooth',
     })
   })
-
-  filters.findAllTypes(matchedImages)
-  rerender()
 }
-
-// Filter and sort handlers
-watch(() => filters.searchQuery.value, () => disposalData())
-watch(() => sort.selectionSortBy.value, () => disposalData())
-watch(() => filters.selectionType.value, () => disposalData())
-watch(() => sort.sortType.value, () => disposalData())
-
-const handleSearchQueryUpdate = () => disposalData()
 
 const handleTypeLabelClick = (key) => {
   if (Object.keys(filters.allTypes.value).length < 2) return
-  rerender()
 
-  if (filters.selectionType.value == key) {
+  if (filters.selectionType.value === key) {
     filters.selectionType.value = undefined
     return
   }
@@ -114,24 +103,21 @@ const handleItemClick = (item) => {
   item.checked = !item.checked
 }
 
+// Image state map for O(1) lookup
+const imageStates = new Map()
+
 const handleImageLoad = (id) => {
-  for (let i = 0; i < images.value.length; i++) {
-    const item = images.value[i]
-    if (item.id == id) {
-      item.imageLoaded = true
-      break
-    }
+  const image = allImages.value.find((item) => item.id === id)
+  if (image) {
+    image.imageLoaded = true
   }
 }
 
 const handleImageError = (id) => {
-  for (let i = 0; i < images.value.length; i++) {
-    const item = images.value[i]
-    if (item.id == id) {
-      item.imageLoaded = true
-      item.imageError = true
-      break
-    }
+  const image = allImages.value.find((item) => item.id === id)
+  if (image) {
+    image.imageLoaded = true
+    image.imageError = true
   }
 }
 
@@ -157,60 +143,55 @@ const handleOpenInNewTab = (url) => {
 }
 
 // Selection handlers
-const selectAllOrDeselectAll = (array, boolean) => {
-  array.forEach((item) => {
+const handleSelectAll = () => {
+  allImages.value.forEach((item) => {
     if (filters.selectionType.value) {
-      if (item.type == filters.selectionType.value) item.checked = boolean
+      if (item.type === filters.selectionType.value) item.checked = true
     } else {
-      item.checked = boolean
+      item.checked = true
     }
   })
 }
 
-const handleSelectAll = () => {
-  selectAllOrDeselectAll(images.value, true)
-  selectAllOrDeselectAll(imagesClone.value, true)
-}
-
 const handleDeselectAll = () => {
-  selectAllOrDeselectAll(images.value, false)
-  selectAllOrDeselectAll(imagesClone.value, false)
+  allImages.value.forEach((item) => {
+    if (filters.selectionType.value) {
+      if (item.type === filters.selectionType.value) item.checked = false
+    } else {
+      item.checked = false
+    }
+  })
 }
 
-// Selection state
-const selectAllDisabled = ref(false)
-const deselectAllDisabled = ref(true)
-const selectedCount = ref(0)
+// Selection state (computed)
+const selectedCount = computed(() => {
+  const filteredImages = filters.selectionType.value
+    ? images.value.filter((item) => item.type === filters.selectionType.value)
+    : images.value
+  return filteredImages.filter((item) => item.checked).length
+})
 
-watch(
-  images,
-  (newVal) => {
-    let filteredImages = newVal
-    if (filters.selectionType.value) {
-      filteredImages = newVal.filter((item) => item.type == filters.selectionType.value)
-    }
-    selectedCount.value = filteredImages.filter((item) => item.checked).length
-    selectAllDisabled.value = filteredImages.every((item) => item.checked)
-    deselectAllDisabled.value = !filteredImages.some((item) => item.checked)
-  },
-  { deep: true }
-)
+const selectAllDisabled = computed(() => {
+  const filteredImages = filters.selectionType.value
+    ? images.value.filter((item) => item.type === filters.selectionType.value)
+    : images.value
+  return filteredImages.every((item) => item.checked)
+})
+
+const deselectAllDisabled = computed(() => {
+  const filteredImages = filters.selectionType.value
+    ? images.value.filter((item) => item.type === filters.selectionType.value)
+    : images.value
+  return !filteredImages.some((item) => item.checked)
+})
 
 // Pagination handlers
 const handlePageChange = (event) => {
   pagination.handlePageChange(event)
-  rerender()
 }
 
 const handleChangePage = ({ page }) => {
   pagination.handleChangePage({ page }, imageGridRef)
-  rerender()
-}
-
-// Utility
-const rerender = () => {
-  listShow.value = false
-  nextTick(() => (listShow.value = true))
 }
 
 // Lifecycle
@@ -233,7 +214,7 @@ onBeforeUnmount(() => {
         @extract="handleExtract"
       />
 
-      <div ref="extractionResultRef" v-if="imagesClone.length" class="py-12" data-test-id="extraction-result">
+      <div ref="extractionResultRef" v-if="allImages.length" class="py-12" data-test-id="extraction-result">
         <div class="mx-auto transition-all w-full max-w-screen-2xl px-6 sm:px-6 lg:px-8">
           <div class="flex flex-col md:flex-row">
             <SidebarControls
@@ -254,7 +235,6 @@ onBeforeUnmount(() => {
               :copyMultipleLoading="copyMultipleLoading"
               @toggleSortOrder="sort.toggleSortOrder"
               @typeLabelClick="handleTypeLabelClick"
-              @searchQueryUpdate="handleSearchQueryUpdate"
               @selectAll="handleSelectAll"
               @deselectAll="handleDeselectAll"
               @download="handleDownload"
@@ -268,7 +248,7 @@ onBeforeUnmount(() => {
               :totalPages="pagination.totalPages.value"
               :pageSize="pagination.pageSize.value"
               :websiteDomainName="extraction.websiteDomainName.value"
-              :imagesCloneLength="imagesClone.length"
+              :imagesCloneLength="allImages.length"
               :isInvertBackground="isInvertBackground"
               :copyTextSingleImageId="copyTextSingleImageId"
               :downloadSingleImageId="downloadSingleImageId"

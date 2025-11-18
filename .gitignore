@@ -7,18 +7,53 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build outputs
 dist
 dist-ssr
 *.local
 
-# Editor directories and files
+# Test coverage
+coverage
+*.lcov
+.nyc_output
+
+# IDE - VSCode
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# IDE - JetBrains
 .idea
+*.iml
+*.ipr
+*.iws
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Editor files
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*~
+
+# Temporary files
+*.tmp
+*.temp
+.cache
+
+# Package manager lock files (optional, uncomment if needed)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Build analysis
+stats.html

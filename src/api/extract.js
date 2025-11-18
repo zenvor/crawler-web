@@ -92,24 +92,3 @@ export const downloadApi = {
     })
   },
 }
-
-// 保留旧的导出以兼容现有代码
-export function extractions(requestMethod, params) {
-  if (requestMethod === 'get') {
-    return extractionApi.getExtraction(params.id)
-  } else {
-    return extractionApi.createExtraction(params)
-  }
-}
-
-export function matchingMechanism(id, mechanism) {
-  return extractionApi.matchOriginal(id, mechanism)
-}
-
-export function downloadMultiple(extractionId, imageIds) {
-  return downloadApi.multiple(extractionId, imageIds)
-}
-
-export function downloadSingle(extractionId, imageId) {
-  return downloadApi.single(extractionId, imageId)
-}
