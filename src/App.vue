@@ -19,6 +19,7 @@ import Paginator from 'primevue/paginator'
 import Image from 'primevue/image'
 import Skeleton from 'primevue/skeleton'
 import Toast from 'primevue/toast'
+import RadioButton from 'primevue/radiobutton'
 import { useToast } from 'primevue/usetoast'
 import { useClipboard } from '@/composables/useClipboard'
 import { useDownload } from '@/composables/useDownload'
@@ -47,6 +48,7 @@ onBeforeUnmount(() => {
 const link = ref('')
 const websiteDomainName = ref('')
 const isInputFocus = ref(false)
+const imageMode = ref('all') // 'all' | 'originals_only'
 
 const validateURL = (value) => {
   const urlRegex = /^(https?:\/\/\S+|file:\/\/\/[A-Za-z]:\/(\S+)|\/\S+)$/
@@ -446,7 +448,11 @@ const handleExtract = async () => {
 
   try {
     console.log('[Extract] 正在创建提取任务，URL:', link.value)
-    const extraction = await extractions('post', { url: link.value, mode: 'advanced' })
+    const extraction = await extractions('post', {
+      url: link.value,
+      mode: 'advanced',
+      imageMode: imageMode.value
+    })
     id.value = extraction.id
     websiteDomainName.value = extraction.url
     console.log('[Extract] 任务创建成功，taskId:', id.value)
@@ -696,50 +702,51 @@ const reset = () => {
                     "
                   >
                     <div class="p-6">
-                      <form class="flex flex-col sm:flex-row gap-3">
-                        <div class="flex-1">
-                          <span style="position: relative" class="relative p-input-icon-left w-full h-full">
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              :style="{
-                                'font-size': '1.4rem',
-                                transition: 'all 200ms',
-                                color: isInputFocus ? 'rgb(5, 150, 105)' : 'black',
-                              }"
-                              class="icon-tabler icon-tabler-link translate-x-1.5 -translate-y-1"
-                              width="24px"
-                              height="24px"
-                              viewBox="0 0 24 24"
-                              stroke-width="2"
-                              stroke="currentColor"
-                              fill="none"
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                            >
-                              <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                              <path d="M9 15l6 -6" />
-                              <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
-                              <path
-                                d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"
+                      <form class="flex flex-col gap-4">
+                        <div class="flex flex-col sm:flex-row gap-3">
+                          <div class="flex-1">
+                            <span style="position: relative" class="relative p-input-icon-left w-full h-full">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                :style="{
+                                  'font-size': '1.4rem',
+                                  transition: 'all 200ms',
+                                  color: isInputFocus ? 'rgb(5, 150, 105)' : 'black',
+                                }"
+                                class="icon-tabler icon-tabler-link translate-x-1.5 -translate-y-1"
+                                width="24px"
+                                height="24px"
+                                viewBox="0 0 24 24"
+                                stroke-width="2"
+                                stroke="currentColor"
+                                fill="none"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                <path d="M9 15l6 -6" />
+                                <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                                <path
+                                  d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"
+                                />
+                              </svg>
+                              <InputText
+                                @focus="isInputFocus = true"
+                                @blur="isInputFocus = false"
+                                size="large"
+                                v-model="link"
+                                class="pl-16 h-14 text-base w-full"
+                                placeholder="Enter any URL, like google.com"
                               />
-                            </svg>
-                            <InputText
-                              @focus="isInputFocus = true"
-                              @blur="isInputFocus = false"
-                              size="large"
-                              v-model="link"
-                              class="pl-16 h-14 text-base w-full"
-                              placeholder="Enter any URL, like google.com"
-                            />
-                          </span>
-                        </div>
-                        <Button
-                          :disabled="disabled"
-                          :loading="extractLoading"
-                          @click="handleExtract"
-                          label="Extract"
-                          class="whitespace-nowrap !text-lg"
-                        >
+                            </span>
+                          </div>
+                          <Button
+                            :disabled="disabled"
+                            :loading="extractLoading"
+                            @click="handleExtract"
+                            label="Extract"
+                            class="whitespace-nowrap !text-lg"
+                          >
                           <template #loadingicon>
                             <div
                               :class="[
@@ -772,6 +779,22 @@ const reset = () => {
                             </div>
                           </template>
                         </Button>
+                        </div>
+
+                        <!-- Image Mode Selector -->
+                        <div class="flex flex-col gap-2">
+                          <label class="text-sm font-medium text-gray-700">Image Mode:</label>
+                          <div class="flex flex-col sm:flex-row gap-3">
+                            <div class="flex items-center gap-2">
+                              <RadioButton v-model="imageMode" inputId="mode_all" name="imageMode" value="all" />
+                              <label for="mode_all" class="cursor-pointer">All images</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                              <RadioButton v-model="imageMode" inputId="mode_originals" name="imageMode" value="originals_only" />
+                              <label for="mode_originals" class="cursor-pointer">Original images only</label>
+                            </div>
+                          </div>
+                        </div>
                       </form>
                     </div>
                   </div>
