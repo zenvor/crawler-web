@@ -31,20 +31,17 @@ export function useWebSocket(options = {}) {
    */
   const connect = (url, callbacks = {}) => {
     if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-      console.log('[WebSocket] Already connected')
       return
     }
 
     try {
       status.value = 'connecting'
-      console.log(`[WebSocket] Connecting to ${url}...`)
 
       ws.value = new WebSocket(url)
 
       ws.value.onopen = (event) => {
         status.value = 'connected'
         reconnectAttempts.value = 0
-        console.log('[WebSocket] ✅ Connected successfully')
 
         if (callbacks.onOpen) {
           callbacks.onOpen(event)
@@ -68,10 +65,6 @@ export function useWebSocket(options = {}) {
 
       ws.value.onclose = (event) => {
         const wasClean = event.wasClean
-        const code = event.code
-        const reason = event.reason
-
-        console.log(`[WebSocket] 🔌 Connection closed - Code: ${code}, Clean: ${wasClean}, Reason: ${reason}`)
 
         status.value = 'disconnected'
 
@@ -83,11 +76,11 @@ export function useWebSocket(options = {}) {
         if (!wasClean && reconnectAttempts.value < maxReconnectAttempts) {
           attemptReconnect(url, callbacks)
         } else if (reconnectAttempts.value >= maxReconnectAttempts) {
-          console.error('[WebSocket] ❌ Max reconnection attempts reached')
+          console.error('[WebSocket] Max reconnection attempts reached')
         }
       }
     } catch (error) {
-      console.error('[WebSocket] ❌ Failed to create connection:', error)
+      console.error('[WebSocket] Failed to create connection:', error)
       status.value = 'error'
     }
   }
@@ -104,10 +97,6 @@ export function useWebSocket(options = {}) {
     const delay = Math.min(
       reconnectDelay * Math.pow(2, reconnectAttempts.value - 1),
       maxReconnectDelay
-    )
-
-    console.log(
-      `[WebSocket] 🔄 Reconnecting in ${delay}ms (Attempt ${reconnectAttempts.value}/${maxReconnectAttempts})...`
     )
 
     reconnectTimer.value = setTimeout(() => {
@@ -127,7 +116,6 @@ export function useWebSocket(options = {}) {
     }
 
     if (ws.value) {
-      console.log('[WebSocket] Disconnecting...')
       ws.value.close(code, reason)
       ws.value = null
     }

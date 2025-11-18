@@ -128,30 +128,42 @@ export function useImageExtraction() {
 
     matchTheOriginalImageLoading.value = true
 
-    const response = await extractionApi.matchOriginal(id.value, mechanism)
+    try {
+      const response = await extractionApi.matchOriginal(id.value, mechanism)
 
-    if (!response.images.length) {
-      extractLoading.value = false
-      isMatchTheOriginalImage.value = false
+      if (!response.images.length) {
+        matchTheOriginalImageLoading.value = false
+        isMatchTheOriginalImage.value = false
+
+        return toast.add({
+          severity: 'error',
+          summary: 'No image was extracted',
+          group: 'bc',
+          life: 3000,
+        })
+      }
+
+      images.value = processImages(response.images)
+
+      if (onSuccess) {
+        onSuccess(images.value)
+      }
+
+      setTimeout(() => {
+        matchTheOriginalImageLoading.value = false
+      }, 500)
+    } catch (error) {
       matchTheOriginalImageLoading.value = false
+      isMatchTheOriginalImage.value = false
 
-      return toast.add({
+      toast.add({
         severity: 'error',
-        summary: 'No image was extracted',
+        summary: 'Failed to match original images',
+        detail: error.message || 'An unexpected error occurred',
         group: 'bc',
         life: 3000,
       })
     }
-
-    images.value = processImages(response.images)
-
-    if (onSuccess) {
-      onSuccess(images.value)
-    }
-
-    setTimeout(() => {
-      matchTheOriginalImageLoading.value = false
-    }, 500)
   }
 
   // 重置参数

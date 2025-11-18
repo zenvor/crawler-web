@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import { useToast } from 'primevue/usetoast'
 
 export function useClipboard() {
@@ -6,6 +6,7 @@ export function useClipboard() {
 
   const copyMultipleLoading = ref(false)
   const copyTextSingleImageId = ref('')
+  const timers = []
 
   function copyTextToClipboardFallback(text) {
     try {
@@ -45,9 +46,10 @@ export function useClipboard() {
       copyTextSingleImageId.value = imageId
       await copyTextToClipboard(url)
     } finally {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         copyTextSingleImageId.value = ''
       }, 1000)
+      timers.push(timer)
     }
   }
 
@@ -57,11 +59,19 @@ export function useClipboard() {
       copyMultipleLoading.value = true
       await copyTextToClipboard(urls.join(','))
     } finally {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         copyMultipleLoading.value = false
       }, 1000)
+      timers.push(timer)
     }
   }
+
+  function cleanup() {
+    timers.forEach(clearTimeout)
+    timers.length = 0
+  }
+
+  onBeforeUnmount(cleanup)
 
   return {
     copyMultipleLoading,
@@ -69,5 +79,6 @@ export function useClipboard() {
     copyTextToClipboard,
     copySingleUrl,
     copySelectedUrls,
+    cleanup,
   }
 }
