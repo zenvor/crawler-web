@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { downloadApi } from '@/api/extract'
 
@@ -7,6 +7,7 @@ export function useDownload() {
 
   const downloadMultipleLoading = ref(false)
   const downloadSingleImageId = ref('')
+  const timers = []
 
   function extractFilenameFromHeaders(headers) {
     const contentDisposition = headers?.['content-disposition']
@@ -71,9 +72,10 @@ export function useDownload() {
     } catch (error) {
       await handleDownloadError(error)
     } finally {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         downloadSingleImageId.value = ''
       }, 500)
+      timers.push(timer)
     }
   }
 
@@ -102,16 +104,25 @@ export function useDownload() {
     } catch (error) {
       await handleDownloadError(error)
     } finally {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         downloadMultipleLoading.value = false
       }, 500)
+      timers.push(timer)
     }
   }
+
+  function cleanup() {
+    timers.forEach(clearTimeout)
+    timers.length = 0
+  }
+
+  onBeforeUnmount(cleanup)
 
   return {
     downloadMultipleLoading,
     downloadSingleImageId,
     downloadSingleById,
     downloadSelectedByIds,
+    cleanup,
   }
 }
