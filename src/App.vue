@@ -49,6 +49,7 @@ const link = ref('')
 const websiteDomainName = ref('')
 const isInputFocus = ref(false)
 const imageMode = ref('all') // 'all' | 'originals_only'
+const showImageModeOptions = ref(false) // 控制 Image Mode 配置区域的显示/隐藏
 
 const validateURL = (value) => {
   const urlRegex = /^(https?:\/\/\S+|file:\/\/\/[A-Za-z]:\/(\S+)|\/\S+)$/
@@ -783,17 +784,52 @@ const reset = () => {
 
                         <!-- Image Mode Selector -->
                         <div class="flex flex-col gap-2">
-                          <label class="text-sm font-medium text-gray-700">Image Mode:</label>
-                          <div class="flex flex-col sm:flex-row gap-3">
-                            <div class="flex items-center gap-2">
-                              <RadioButton v-model="imageMode" inputId="mode_all" name="imageMode" value="all" />
-                              <label for="mode_all" class="cursor-pointer">All images</label>
-                            </div>
-                            <div class="flex items-center gap-2">
-                              <RadioButton v-model="imageMode" inputId="mode_originals" name="imageMode" value="originals_only" />
-                              <label for="mode_originals" class="cursor-pointer">Original images only</label>
-                            </div>
+                          <div
+                            @click="showImageModeOptions = !showImageModeOptions"
+                            class="flex items-center justify-between cursor-pointer group"
+                          >
+                            <label class="text-sm font-medium text-gray-700 cursor-pointer">Advanced Options</label>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              class="transition-transform duration-200 text-gray-500 group-hover:text-gray-700"
+                              :class="{ 'rotate-180': showImageModeOptions }"
+                              width="20"
+                              height="20"
+                              viewBox="0 0 24 24"
+                              stroke-width="2"
+                              stroke="currentColor"
+                              fill="none"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                              <path d="M6 9l6 6l6 -6"/>
+                            </svg>
                           </div>
+                          <transition
+                            enter-active-class="transition-all duration-200 ease-out"
+                            leave-active-class="transition-all duration-200 ease-in"
+                            enter-from-class="opacity-0 max-h-0"
+                            enter-to-class="opacity-100 max-h-24"
+                            leave-from-class="opacity-100 max-h-24"
+                            leave-to-class="opacity-0 max-h-0"
+                          >
+                            <div v-show="showImageModeOptions" class="overflow-hidden">
+                              <div class="pt-2 flex flex-col gap-2">
+                                <label class="text-sm font-medium text-gray-600">Image Mode:</label>
+                                <div class="flex flex-col sm:flex-row gap-3">
+                                  <div class="flex items-center gap-2">
+                                    <RadioButton v-model="imageMode" inputId="mode_all" name="imageMode" value="all" />
+                                    <label for="mode_all" class="cursor-pointer text-sm">All images</label>
+                                  </div>
+                                  <div class="flex items-center gap-2">
+                                    <RadioButton v-model="imageMode" inputId="mode_originals" name="imageMode" value="originals_only" />
+                                    <label for="mode_originals" class="cursor-pointer text-sm">Original images only</label>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </transition>
                         </div>
                       </form>
                     </div>
